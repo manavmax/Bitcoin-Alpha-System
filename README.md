@@ -1,4 +1,4 @@
-Research Paper:- https://ieeexplore.ieee.org/document/11466047
+Research Paper on this project:- https://ieeexplore.ieee.org/document/11466047
 
 The above uploaded is Model v1.
 The Alpha Model v2 and Research Paper will be open sourced shortly , as soon as the testing is done fully.
