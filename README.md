@@ -362,11 +362,6 @@ Building the next generation of decision intelligence for digital asset markets.
 ⭐ Star the repository if you find the project interesting.
 
 </div>
-The above uploaded is Model v1.
-The Alpha Model v2 and Research Paper will be open sourced shortly , as soon as the testing is done fully.
-
-- Here is a sneak peek at the model v2 performance:
-<img width="1171" height="226" alt="Screenshot 2026-06-03 at 12 31 03 AM" src="https://github.com/user-attachments/assets/5a03d7af-9d1f-4257-ba60-f0f415276956" />
 
 
 
