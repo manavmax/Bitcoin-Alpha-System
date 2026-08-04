@@ -1,4 +1,4 @@
-Research Paper on this project:- https://ieeexplore.ieee.org/document/11466047
+# Research Paper Published On This Project:- https://ieeexplore.ieee.org/document/11466047
 <div align="center">
 
 # ₿ Bitcoin Alpha System
