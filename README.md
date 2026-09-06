@@ -1,368 +1,169 @@
-# Research Paper Published On This Project:- https://ieeexplore.ieee.org/document/11466047
-<div align="center">
+# Bitcoin Alpha System
 
-# ₿ Bitcoin Alpha System
-
-### AI-Powered Market Intelligence for Digital Asset Markets
-
-<p align="center">
-  <img src="https://img.shields.io/badge/AI-Market%20Intelligence-blue?style=for-the-badge">
-  <img src="https://img.shields.io/badge/Bitcoin-Forecasting-F7931A?style=for-the-badge&logo=bitcoin&logoColor=white">
-  <img src="https://img.shields.io/badge/Status-Active%20Development-success?style=for-the-badge">
-  <img src="https://img.shields.io/badge/Architecture-Proprietary-purple?style=for-the-badge">
-  <img src="https://img.shields.io/badge/Research-Quantitative-black?style=for-the-badge">
-</p>
-
-### Turning Complex Market Data Into Actionable Intelligence
-
----
-
-*Designed to identify market opportunities through advanced forecasting, regime analysis, and decision intelligence.*
-
-</div>
-
----
-
-# Overview
-
-Bitcoin Alpha System is a next-generation market intelligence platform built to analyze digital asset markets through a multi-layer forecasting architecture.
-
-The platform continuously evaluates market conditions, participant behavior, liquidity environments, and broader economic factors to generate high-confidence market intelligence.
-
-Rather than focusing solely on predicting price, the system is designed to answer a more important question:
-
-> **Is there an opportunity worth acting on?**
-
-This philosophy enables the platform to prioritize decision quality, risk awareness, and market context over simple directional forecasting.
-
----
-
-# Vision
-
-Financial markets generate enormous amounts of information every second.
-
-Most participants focus on isolated indicators.
-
-Bitcoin Alpha System is built around a different idea:
-
-### Market intelligence emerges from combining multiple perspectives.
-
-The platform integrates diverse information streams into a unified intelligence framework capable of identifying:
-
-- Emerging trends
-- Market regime shifts
-- Risk conditions
-- Liquidity transitions
-- High-conviction opportunities
-
----
-
-# Core Capabilities
-
-### Market Intelligence
-
-Transform raw market information into actionable insights.
-
-### Forecasting
-
-Generate forward-looking assessments of market conditions.
-
-### Regime Analysis
-
-Identify changing market environments before they become obvious.
-
-### Risk Awareness
-
-Evaluate uncertainty and confidence before decisions are made.
-
-### Decision Intelligence
-
-Convert complex data into understandable signals and recommendations.
-
----
-
-# High-Level Architecture
-
-```mermaid
-flowchart LR
-
-A[Market Data]
-B[Market Intelligence Layer]
-C[Forecasting Layer]
-D[Risk Analysis Layer]
-E[Regime Detection Layer]
-F[Intelligence Core]
-G[Decision Engine]
-H[Actionable Insights]
-
-A --> B
-
-B --> C
-B --> D
-B --> E
-
-C --> F
-D --> F
-E --> F
-
-F --> G
-
-G --> H
+```
+PAPER   IEEE ICIPTM 2026 — Regime-Aware Meta-Learning for Selective Directional Trading
+MODELS  8 signal modules -> master ensemble -> meta-classifier -> champion/challenger
+STATUS  architecture implemented, out-of-sample validation in progress
 ```
 
----
+[![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)](https://pytorch.org/)
+[![Paper](https://img.shields.io/badge/IEEE-published-success?style=for-the-badge)](https://doi.org/10.1109/ICIPTM69057.2026.11466047)
 
-# Intelligence Framework
-
-The platform is built around multiple specialized analytical engines.
-
-Each engine focuses on a different dimension of market behavior.
-
-### Forecasting Intelligence
-
-Analyzes evolving market dynamics and directional tendencies.
-
-### Risk Intelligence
-
-Evaluates uncertainty, volatility conditions, and market stability.
-
-### Positioning Intelligence
-
-Monitors participant behavior and structural market activity.
-
-### Network Intelligence
-
-Measures ecosystem-level strength and activity.
-
-### Macro Intelligence
-
-Tracks broader economic and liquidity conditions.
-
-### Decision Intelligence
-
-Synthesizes information into actionable outcomes.
+A regime-aware meta-learning system for BTC markets, implementing the architecture from
+*A Regime-Aware Meta-Learning Framework for Selective Directional Trading in Cryptocurrency
+Markets* (IEEE, 2026): eight independent signal modules feeding a master ensemble, a
+meta-classifier that decides whether the current regime is even worth trading, and a
+champion/challenger harness to compare candidate models honestly against each other.
 
 ---
 
-# Product Philosophy
+## Contents
 
-Many forecasting systems attempt to predict where the market will go.
-
-Bitcoin Alpha System focuses on determining:
-
-- Whether an opportunity exists
-- Whether risk is justified
-- Whether confidence is sufficient
-- Whether action should be taken
-
-The goal is not more predictions.
-
-The goal is better decisions.
+- [How it fits together](#how-it-fits-together)
+- [The eight signal modules](#the-eight-signal-modules)
+- [Champion / challenger](#champion--challenger)
+- [Daily pipeline](#daily-pipeline)
+- [Dashboard](#dashboard)
+- [Validation status](#validation-status)
+- [Research paper](#research-paper)
+- [Quick start](#quick-start)
+- [Project structure](#project-structure)
+- [Limitations](#limitations)
+- [License status](#license-status)
 
 ---
 
-# Workflow
+## How it fits together
 
 ```mermaid
-flowchart LR
-
-A[Data Collection]
-
---> B[Intelligence Processing]
-
---> C[Signal Generation]
-
---> D[Risk Assessment]
-
---> E[Decision Layer]
-
---> F[Insight Delivery]
+flowchart TD
+    subgraph Signals["Eight independent signal modules"]
+        M1[Price Dynamics]
+        M2[Volatility / Risk]
+        M3[Derivatives Flow]
+        M4[On-Chain Fundamentals]
+        M5[Sentiment / Narrative]
+        M6[Macro / Liquidity]
+    end
+    Signals --> M7[Master Ensemble]
+    M7 --> M8[Meta-Classifier]
+    M8 --> R{Regime worth trading?}
+    R -->|No| ABSTAIN[Abstain]
+    R -->|Yes| CC[Champion / Challenger]
+    CC --> PIPE[Daily Pipeline]
+    PIPE --> DASH[Dashboard]
 ```
 
----
+The meta-classifier's job is narrower than "predict the price" — its actual output is closer to
+*is this a regime where a directional bet is even justified*, which is the abstention mechanic
+the published paper is built around.
 
-# Key Features
+## The eight signal modules
 
-### Multi-Layer Analysis
+| Module | Folder | What it evaluates |
+|---|---|---|
+| 01 | `model_1_price_dynamics` | Price action and momentum structure |
+| 02 | `model_2_volatility_risk` | Volatility regime and risk conditions |
+| 03 | `model_3_derivatives_flow` | Futures/options positioning and derivatives-market flow |
+| 04 | `model_4_onchain_fundamentals` | On-chain activity — transaction volume, miner behavior, network usage |
+| 05 | `model_5_sentiment_narrative` | Sentiment and narrative signals around the asset |
+| 06 | `model_6_macro_liquidity` | Broader macro and liquidity conditions |
+| 07 | `model7_master_ensemble` | Combines all six signal modules into a unified view |
+| 08 | `model8_meta_classifier` | Decides regime and confidence; gates whether a trade is justified at all |
 
-Combines independent intelligence systems into a unified framework.
+Each module is independently swappable — the ensemble layer is what makes this a system rather
+than six unrelated scripts.
 
-### Regime Awareness
+## Champion / challenger
 
-Designed to adapt to changing market conditions.
+`champion_challenger/` holds the harness that lets a new candidate model prove itself against
+the currently deployed one on shared data before it's allowed to replace it. Nothing gets
+promoted on vibes — a challenger has to actually beat the champion on the same evaluation
+window first.
 
-### Confidence-Driven Decisions
+## Daily pipeline
 
-Signals are generated only when confidence criteria are satisfied.
+`run_daily_pipeline.py` runs the full chain end to end: pull fresh data, run it through all
+eight signal modules, combine through the ensemble and meta-classifier, and log the resulting
+decision. This is the same code path used whether you're backtesting historically or running
+against today's data — one pipeline, not a research version and a separate production version
+that can quietly drift apart from each other.
 
-### Continuous Learning
+## Dashboard
 
-Architecture supports ongoing model evolution and research.
+`dashboard/` visualizes what the pipeline is actually doing day to day — signal history,
+regime classification over time, and champion vs. challenger comparisons — rather than
+requiring you to read logs to know what the system decided and why.
 
-### Scalable Design
+## Validation status
 
-Built for future expansion across additional assets and markets.
+The architecture above is implemented and running. A rigorous walk-forward and out-of-sample
+validation pass is in progress, and no performance number is being published in this README
+until it's been through that process — a number quoted before validation is complete is worse
+than no number at all, since it can't yet be distinguished from noise. Once results are
+validated, they'll replace this section directly, with the methodology alongside them.
 
----
+## Research paper
 
-# Technology Stack
+> **A Regime-Aware Meta-Learning Framework for Selective Directional Trading in Cryptocurrency Markets**
+> Manav Sharma. IEEE, ICIPTM 2026. DOI: [10.1109/ICIPTM69057.2026.11466047](https://doi.org/10.1109/ICIPTM69057.2026.11466047)
 
-## Data & Analytics
+Formalizes latent market-regime identification through unsupervised temporal clustering, paired
+with a meta-learned classifier that abstains from trading when regime confidence is low rather
+than forcing a directional guess. This repository is the applied implementation of that paper.
 
-- Python
-- Pandas
-- NumPy
-- Polars
+## Quick start
 
-## Machine Learning
+```bash
+git clone https://github.com/manavmax/Bitcoin-Alpha-System
+cd Bitcoin-Alpha-System
+pip install -r requirements.txt
 
-- PyTorch
-- TensorFlow
-- Scikit-Learn
+python run_daily_pipeline.py
+```
 
-## Visualization
+<details>
+<summary>Running an individual signal module in isolation</summary>
 
-- Plotly
-- Streamlit
+Each `model_N_*` folder is independently runnable against `data/raw/` for debugging or
+inspecting a single signal without running the full ensemble — see that module's own `src/`
+for its entry point.
 
-## Infrastructure
+</details>
 
-- Docker
-- GitHub Actions
+## Project structure
 
----
-
-# Dashboard
-
-The platform includes a visualization layer designed to provide:
-
-- Market Overview
-- Intelligence Monitoring
-- Confidence Tracking
-- Regime Analysis
-- Signal History
-- Research Insights
-
----
-
-# Use Cases
-
-### Traders
-
-Support discretionary decision-making with data-driven intelligence.
-
-### Researchers
-
-Explore market structure and forecasting methodologies.
-
-### Analysts
-
-Monitor evolving market conditions.
-
-### Institutions
-
-Integrate intelligence into broader investment workflows.
-
----
-
-# Research & Development
-
-Bitcoin Alpha System is an actively evolving research platform.
-
-Current development focuses on:
-
-- Advanced forecasting systems
-- Adaptive intelligence frameworks
-- Automated research pipelines
-- Enhanced risk modeling
-- Scalable decision architectures
-
----
-
-# Roadmap
-
-## Current
-
-- [x] Market Intelligence Framework
-- [x] Forecasting Infrastructure
-- [x] Regime Analysis
-- [x] Risk Assessment Layer
-
-## Future
-
-- [ ] Institutional Dashboard
-- [ ] API Platform
-- [ ] Real-Time Intelligence Engine
-- [ ] Multi-Asset Support
-- [ ] Portfolio Intelligence
-- [ ] Enterprise Integrations
-- [ ] AI Research Assistant
-- [ ] SaaS Platform
-
----
-
-# Repository Structure
-
-```text
-bitcoin-alpha-system/
-
-├── data/
-├── processed/
+```
+Bitcoin-Alpha-System/
+├── model_1_price_dynamics/
+├── model_2_volatility_risk/
+├── model_3_derivatives_flow/
+├── model_4_onchain_fundamentals/
+├── model_5_sentiment_narrative/src/
+├── model_6_macro_liquidity/
+├── model7_master_ensemble/
+├── model8_meta_classifier/
+├── champion_challenger/         candidate vs. deployed model comparison harness
+├── dashboard/                   visualization layer
+├── data/raw/
 ├── src/
-├── dashboard/
-├── reports/
-├── research/
-├── infrastructure/
-└── documentation/
+└── run_daily_pipeline.py        single entry point, backtest and live share this code path
 ```
 
----
+## Limitations
 
-# Security & Intellectual Property
+- This is a research system. Nothing here is investment advice or a claim of a validated,
+  tradeable edge until the validation pass referenced above is complete.
+- Each signal module is only as good as the data feeding it — on-chain and sentiment signals
+  in particular are noisier and slower-moving than price/volatility signals, and the
+  meta-classifier's abstention behavior exists specifically to handle that asymmetry.
 
-Certain implementation details, forecasting methodologies, and decision-generation processes remain proprietary.
+## License status
 
-The public repository is intended to showcase the platform architecture, research direction, and product vision while protecting core intellectual property.
-
----
-
-# Contributing
-
-Contributions, suggestions, and discussions are welcome.
-
-Areas of interest include:
-
-- Data Engineering
-- Visualization
-- Infrastructure
-- Research Tooling
-- Platform Development
-- Documentation
+No license has been selected yet.
 
 ---
 
-# Long-Term Mission
-
-Our mission is to build an intelligent decision-support platform capable of transforming complex market data into clear, actionable intelligence.
-
-The future of investing is not more information.
-
-The future is better intelligence.
-
----
-
-<div align="center">
-
-## ₿ Bitcoin Alpha System
-
-### AI-Powered Market Intelligence
-
-Building the next generation of decision intelligence for digital asset markets.
-
-⭐ Star the repository if you find the project interesting.
-
-</div>
-
-
-
-
+**Colophon.** Manav Sharma, first author, IEEE ICIPTM 2026. If something here doesn't match the
+code, open an issue — this file should describe what's actually running, not what's aspirational.
