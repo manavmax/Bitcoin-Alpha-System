@@ -166,4 +166,4 @@ No license has been selected yet.
 ---
 
 **Colophon.** Manav Sharma, first author, IEEE ICIPTM 2026. If something here doesn't match the
-code, open an issue — this file should describe what's actually running, not what's aspirational.
+code, open an issue - this file should describe what's actually running, not what's aspirational.
