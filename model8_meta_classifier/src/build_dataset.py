@@ -20,13 +20,19 @@ OUT_FILE = "model8_meta_classifier/data/model8_dataset.csv"
 KEEP_LIVE_LAST_ROW = True  # keep latest row even if future_ret is NaN (needed for live inference)
 
 # Which candles make it onto the master timeline:
-#   "latest" (default) -> every candle the price sync produced, up to and
-#                         including the current UTC day, so the pipeline can
-#                         publish a signal that is actionable *today*.
-#   "closed"           -> strictly candles that have already closed
-#                         (date < today UTC) - the original behaviour.
-# Override at runtime with e.g.  MODEL8_CUTOFF=closed python run_daily_pipeline.py
-CUTOFF_MODE = os.getenv("MODEL8_CUTOFF", "latest").strip().lower()
+#   "closed" (default) -> strictly candles that have already closed
+#                         (date < today UTC). A row dated D is only produced
+#                         once day D has ended, so every published prediction
+#                         is computed from a complete candle. On day T the
+#                         newest row is T-1 (actionable on T); today's row
+#                         appears only at the start of tomorrow.
+#   "latest"           -> also includes the current, still-forming UTC day.
+#                         DEBUGGING ONLY - never publish with this: the row
+#                         mutates intraday, base models 4/6 publish closed
+#                         candles only (so signal_4/signal_6 go missing on
+#                         that row), and the premature signal can flip.
+# Override at runtime with e.g.  MODEL8_CUTOFF=latest python run_daily_pipeline.py
+CUTOFF_MODE = os.getenv("MODEL8_CUTOFF", "closed").strip().lower()
 
 # ===============================
 # DATE NORMALIZATION (CRITICAL)
@@ -50,14 +56,17 @@ def load_price():
 
     price = price.sort_values("date").reset_index(drop=True)
 
-    # IMPORTANT: by default the master timeline runs up to *today* (UTC) so the
-    # pipeline can publish a signal for the current day. Set MODEL8_CUTOFF=closed
-    # to go back to using only fully closed candles (date < today UTC).
+    # IMPORTANT: only fully closed candles are used by default - a prediction
+    # may only be produced for a day once that day has ended (candle closed at
+    # 00:00 UTC). Set MODEL8_CUTOFF=latest to include today's in-progress
+    # candle (debugging only - produces a premature, mutating signal).
     today_utc = datetime.now(timezone.utc).date()
     if CUTOFF_MODE == "closed":
         price = price[price["date"].dt.date < today_utc].reset_index(drop=True)
     else:
         price = price[price["date"].dt.date <= today_utc].reset_index(drop=True)
+        print(f"⚠️ MODEL8_CUTOFF=latest - including today's forming candle "
+              f"({today_utc}); do NOT use for published signals")
     price["future_ret"] = price["Close"].pct_change().shift(-1)
     return price[["date", "future_ret"]]
 
@@ -116,6 +125,28 @@ def main():
 
         # Fill missing signal with 0 (neutral)
         base[name] = base[name].fillna(0.0)
+
+    # --------------------------------------------------------------
+    # Coverage diagnostics - flag base signals whose source has gone
+    # stale relative to the master timeline. Recent rows for a stale
+    # signal are zero-filled with *_missing = 1, which degrades the
+    # Model 8B inputs, so surface the gap loudly at build time.
+    # --------------------------------------------------------------
+    master_max = base["date"].max().date()
+    for name, path in SIGNALS.items():
+        flag = f"{name}_missing"
+        with_data = base.loc[base[flag] == 0, "date"]
+        if with_data.empty:
+            print(f"⚠️ {name}: no usable rows loaded from {path}")
+            continue
+        last_ok = with_data.max().date()
+        if last_ok < master_max:
+            stale_days = (master_max - last_ok).days
+            hint = (" - set COINALYZE_API_KEY (.env) and re-run to refresh "
+                    "Model 3" if name == "signal_3" else "")
+            print(f"⚠️ {name}: source STALE - last data {last_ok}, "
+                  f"{stale_days} day(s) behind {master_max}; recent rows "
+                  f"zero-filled with {flag}=1{hint}")
 
     # Keep the final row for live inference (future_ret is unknown for the most recent day).
     # Training scripts should explicitly drop NaN labels when needed.

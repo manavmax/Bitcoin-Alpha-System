@@ -1,8 +1,18 @@
+import os
+from datetime import datetime, timezone
+
 import pandas as pd
 import joblib
 import numpy as np
 
 TAU = 0.60  # confidence threshold
+
+# Append-only publication target. Rows already written here are immutable:
+# reruns never recompute or rewrite previously published predictions - each
+# run only appends dates that have newly closed.
+OUT_CSV = "model8_meta_classifier/results/model8_final_signal.csv"
+OUT_COLUMNS = ["date", "final_signal", "confidence",
+               "tradable", "vol_regime", "macro_regime"]
 
 # --------------------------------------------------
 # Utilities
@@ -122,21 +132,76 @@ def main():
     df.loc[active & (df["direction"] == 0), "final_signal"] = "SHORT"
 
     # --------------------------------------------------
-    # Save output
+    # Save output — APPEND-ONLY publication
     # --------------------------------------------------
-    out = df[
-        ["date", "final_signal", "confidence",
-         "tradable", "vol_regime", "macro_regime"]
-    ]
+    # The block above computes a fresh full-history frame (needed for the
+    # coverage diagnostic), but only *newly closed* dates may be published:
+    #   * every row already present in OUT_CSV is kept byte-for-byte —
+    #     previously published predictions are immutable, upstream refits
+    #     (GARCH, base models, etc.) must never rewrite them;
+    #   * rows for candles that have not closed yet (date >= today UTC)
+    #     are never published (and defensively purged if found);
+    #   * only dates missing from OUT_CSV are appended.
+    # Re-running the pipeline on the same day is therefore byte-idempotent.
+    fresh = df[OUT_COLUMNS].copy()
+    fresh["date"] = pd.to_datetime(fresh["date"], utc=True)
+    fresh = fresh.sort_values("date").reset_index(drop=True)
+    fresh = fresh[fresh["date"].dt.date < datetime.now(timezone.utc).date()]
 
-    out.to_csv(
-        "model8_meta_classifier/results/model8_final_signal.csv",
-        index=False
+    if not os.path.exists(OUT_CSV):
+        fresh.to_csv(OUT_CSV, index=False)
+        print("✅ MODEL 8 FINAL COMPLETE")
+        print(f"Coverage @ τ={TAU}: {(active.mean() * 100):.2f}%")
+        print(f"Created → {OUT_CSV} | rows={len(fresh)}")
+        return
+
+    published = pd.read_csv(OUT_CSV)
+    if not set(OUT_COLUMNS).issubset(published.columns):
+        raise RuntimeError(
+            f"❌ {OUT_CSV} has an unexpected schema {list(published.columns)}; "
+            "refusing to touch published predictions. Restore the 6-column "
+            "file before re-running."
+        )
+    published = published[OUT_COLUMNS]
+    published["date"] = pd.to_datetime(published["date"], utc=True)
+
+    today_utc = datetime.now(timezone.utc).date()
+
+    # Defensive purge: a prediction must never exist for an unclosed candle.
+    unclosed = published["date"].dt.date >= today_utc
+    n_unclosed = int(unclosed.sum())
+    if n_unclosed:
+        dropped = (published.loc[unclosed, "date"]
+                   .dt.strftime("%Y-%m-%d").tolist())
+        print(f"🗑️ Removing non-closed prediction row(s) {dropped} "
+              "(candle had not closed when they were published)")
+        published = published.loc[~unclosed]
+
+    published_dates = set(published["date"])
+    new_rows = fresh[~fresh["date"].isin(published_dates)]
+
+    combined = (
+        pd.concat([published, new_rows], ignore_index=True)
+        .sort_values("date")
+        .reset_index(drop=True)
     )
+    # Keep published dtypes/formatting stable (int 0/1 vs float 0.0/1.0).
+    combined["tradable"] = combined["tradable"].astype("int64")
+    combined["macro_regime"] = combined["macro_regime"].astype("int64")
+    combined["vol_regime"] = combined["vol_regime"].astype("float64")
+    combined["confidence"] = combined["confidence"].astype("float64")
+    combined = combined[OUT_COLUMNS]
+
+    combined.to_csv(OUT_CSV, index=False)
 
     print("✅ MODEL 8 FINAL COMPLETE")
     print(f"Coverage @ τ={TAU}: {(active.mean() * 100):.2f}%")
-    print("Saved → model8_meta_classifier/results/model8_final_signal.csv")
+    print(f"🔒 Append-only publish: {len(published)} frozen row(s), "
+          f"{len(new_rows)} appended, {n_unclosed} purged")
+    if len(new_rows):
+        print("   new rows: "
+              + ", ".join(new_rows["date"].dt.strftime("%Y-%m-%d")))
+    print(f"Saved → {OUT_CSV} | rows={len(combined)}")
 
 if __name__ == "__main__":
     main()
