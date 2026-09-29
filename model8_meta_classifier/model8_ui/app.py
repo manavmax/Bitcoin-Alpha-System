@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import math
+import os
+import sys
 from datetime import timedelta
 
 import pandas as pd
@@ -8,6 +10,11 @@ import plotly.graph_objects as go
 import requests
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
+
+# Resolve the sibling `theme` module regardless of how the app is launched.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import theme  # noqa: E402
 
 # =====================================================
 # PAGE CONFIG
@@ -28,47 +35,8 @@ DATA_MODEL8 = "model8_meta_classifier/data/model8_dataset.csv"
 
 
 def _inject_css() -> None:
-    st.markdown(
-        """
-        <style>
-          /* Reduce top padding */
-          .block-container { padding-top: 1.2rem; padding-bottom: 1.2rem; }
-
-          /* Hide Streamlit footer/menu for a cleaner look */
-          #MainMenu { visibility: hidden; }
-          footer { visibility: hidden; }
-
-          /* Card styling */
-          .cq-card {
-            border: 1px solid rgba(255,255,255,0.08);
-            background: rgba(255,255,255,0.03);
-            border-radius: 14px;
-            padding: 14px 16px;
-          }
-          .cq-kpi-title {
-            font-size: 0.82rem;
-            opacity: 0.75;
-            margin-bottom: 6px;
-          }
-          .cq-kpi-value {
-            font-size: 1.35rem;
-            font-weight: 650;
-            line-height: 1.1;
-          }
-          .cq-kpi-sub {
-            font-size: 0.85rem;
-            opacity: 0.8;
-            margin-top: 6px;
-          }
-
-          /* Make dataframe headers slightly tighter */
-          div[data-testid="stDataFrame"] div[role="columnheader"] {
-            font-size: 0.85rem;
-          }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+    # Presentation only -- every token lives in theme.py / .streamlit/config.toml
+    theme.inject_css(st)
 
 # =====================================================
 # LIVE BTC PRICE (1s TICK)
@@ -156,25 +124,45 @@ st.sidebar.caption(
 # =====================================================
 # HEADER (TOP BAR)
 # =====================================================
-top_l, top_r = st.columns([2.2, 1.0])
+top_l, top_r = st.columns([2.0, 1.0])
 with top_l:
-    st.markdown("## Bitcoin Intelligence — Model 8")
-    st.caption("Regime-aware multi-factor system · research dashboard")
+    st.markdown(
+        """
+        <div class="cq-topstrip">
+          <span class="cq-brand">Bitcoin Intelligence — Model 8</span>
+          <span class="cq-session">Regime-aware multi-factor system · research dashboard</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 with top_r:
     if live_price:
         st.metric("BTC (live)", f"${live_price:,.2f}")
 
 vol_label = "High vol" if float(latest["vol_regime"]) == 1.0 else "Low vol"
-macro_label = "Risk-on" if float(latest["macro_regime"]) == 1.0 else "Risk-off"
+# macro_regime == 1  <=>  macro_signal < 0  (bearish / risk-off), which is the
+# convention Model 8A was trained on (see build_model8A_dataset.py).
+macro_label = "Risk-off" if float(latest["macro_regime"]) == 1.0 else "Risk-on"
 
-hdr1, hdr2, hdr3, hdr4, hdr5 = st.columns([1.2, 1.0, 1.0, 1.0, 1.4])
+hdr1, hdr2, hdr3, hdr4, hdr5 = st.columns([1.2, 1.0, 1.0, 1.0, 1.2])
+
+# Presentation only: the decision card leads the row, and its direction is
+# encoded on the card edge plus the value colour.
+decision_card_class = "cq-card cq-card--decision"
+decision_value_class = "cq-kpi-value"
+if str(latest["final_signal"]) == "LONG":
+    decision_card_class = "cq-card cq-card--long"
+    decision_value_class = "cq-kpi-value cq-kpi-value--long"
+elif str(latest["final_signal"]) == "SHORT":
+    decision_card_class = "cq-card cq-card--short"
+    decision_value_class = "cq-kpi-value cq-kpi-value--short"
 
 with hdr1:
     st.markdown(
         f"""
-        <div class="cq-card">
+        <div class="{decision_card_class}">
           <div class="cq-kpi-title">Model 8 decision</div>
-          <div class="cq-kpi-value">{latest["final_signal"]}</div>
+          <div class="{decision_value_class}">{latest["final_signal"]}</div>
           <div class="cq-kpi-sub">Decision: {decision_date} · Actionable: {actionable_date}</div>
         </div>
         """,
@@ -273,8 +261,7 @@ def _make_price_chart(df: pd.DataFrame) -> go.Figure:
             low=df["low"],
             close=df["close"],
             name="BTC",
-            increasing_line_color="#00E5A8",
-            decreasing_line_color="#FF4D67",
+            **theme.CANDLE,
         )
     )
     longs = df[df["effective_signal"] == "LONG"]
@@ -286,7 +273,7 @@ def _make_price_chart(df: pd.DataFrame) -> go.Figure:
                 x=longs["date"],
                 y=longs["low"] * 0.996,
                 mode="markers",
-                marker=dict(symbol="triangle-up", size=10, color="#2EEB84"),
+                marker=dict(theme.MARKER_LONG),
                 name="LONG",
             )
         )
@@ -296,20 +283,17 @@ def _make_price_chart(df: pd.DataFrame) -> go.Figure:
                 x=shorts["date"],
                 y=shorts["high"] * 1.004,
                 mode="markers",
-                marker=dict(symbol="triangle-down", size=10, color="#FF4D67"),
+                marker=dict(theme.MARKER_SHORT),
                 name="SHORT",
             )
         )
 
     fig.update_layout(
-        template="plotly_dark",
-        height=640,
-        margin=dict(l=10, r=10, t=10, b=10),
-        xaxis_rangeslider_visible=False,
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        **theme.chart_layout(
+            height=theme.H_HERO,
+            xaxis=dict(rangeslider=dict(visible=False)),
+        )
     )
-    fig.update_xaxes(showgrid=False)
-    fig.update_yaxes(showgrid=True, gridcolor="rgba(255,255,255,0.06)")
     return fig
 
 bt_df = plot_df.copy()
@@ -357,7 +341,7 @@ model8_df_full = model8_df_full.sort_values("date").reset_index(drop=True)
 # REGIME HEATMAP
 # =====================================================
 with tabs[0]:
-    left, right = st.columns([1.55, 1.0])
+    left, right = st.columns([1.6, 1.0])
     with left:
         st.markdown("### Price & signals")
         st.plotly_chart(_make_price_chart(plot_df), width="stretch")
@@ -419,16 +403,14 @@ with tabs[0]:
 with tabs[1]:
     st.markdown("### Performance")
     perf_fig = go.Figure()
-    perf_fig.add_trace(go.Scatter(x=bt_df["date"], y=bt_df["equity"], name="Strategy", line=dict(color="#2EEB84", width=2)))
-    perf_fig.add_trace(go.Scatter(x=bt_df["date"], y=bt_df["bh_equity"], name="Buy & hold", line=dict(color="#8AA4FF", width=1.6)))
-    perf_fig.update_layout(template="plotly_dark", height=420, margin=dict(l=10, r=10, t=10, b=10))
-    perf_fig.update_yaxes(showgrid=True, gridcolor="rgba(255,255,255,0.06)")
+    perf_fig.add_trace(go.Scatter(x=bt_df["date"], y=bt_df["equity"], name="Strategy", line=dict(color=theme.COLORS["accent"], width=2)))
+    perf_fig.add_trace(go.Scatter(x=bt_df["date"], y=bt_df["bh_equity"], name="Buy & hold", line=dict(color=theme.COLORS["benchmark"], width=1.6)))
+    perf_fig.update_layout(**theme.chart_layout(height=theme.H_MAIN))
     st.plotly_chart(perf_fig, width="stretch")
 
     rs_fig = go.Figure()
-    rs_fig.add_trace(go.Scatter(x=bt_df["date"], y=bt_df["roll_sharpe_90d"], name="Rolling Sharpe (90d)", line=dict(color="#F5C84B", width=2)))
-    rs_fig.update_layout(template="plotly_dark", height=320, margin=dict(l=10, r=10, t=10, b=10))
-    rs_fig.update_yaxes(showgrid=True, gridcolor="rgba(255,255,255,0.06)")
+    rs_fig.add_trace(go.Scatter(x=bt_df["date"], y=bt_df["roll_sharpe_90d"], name="Rolling Sharpe (90d)", line=dict(color=theme.COLORS["accent"], width=2)))
+    rs_fig.update_layout(**theme.chart_layout(height=theme.H_SUB))
     st.plotly_chart(rs_fig, width="stretch")
 
 with tabs[2]:
@@ -443,7 +425,7 @@ with tabs[2]:
             x=regime_df["date"],
             y=[1] * len(regime_df),
             mode="markers",
-            marker=dict(size=7, color=regime_df["vol_regime"], colorscale="Viridis"),
+            marker=dict(size=7, color=regime_df["vol_regime"], colorscale=theme.SEQUENTIAL),
             name="Vol regime",
         )
     )
@@ -452,16 +434,16 @@ with tabs[2]:
             x=regime_df["date"],
             y=[0] * len(regime_df),
             mode="markers",
-            marker=dict(size=7, color=regime_df["macro_regime"], colorscale="RdYlGn"),
+            marker=dict(size=7, color=regime_df["macro_regime"], colorscale=theme.DIVERGING),
             name="Macro regime",
         )
     )
     regime_fig.update_layout(
-        template="plotly_dark",
-        height=260,
-        margin=dict(l=10, r=10, t=10, b=10),
-        yaxis=dict(tickmode="array", tickvals=[0, 1], ticktext=["Macro", "Vol"]),
-        showlegend=True,
+        **theme.chart_layout(
+            height=theme.H_MINI,
+            yaxis=dict(tickmode="array", tickvals=[0, 1], ticktext=["Macro", "Vol"]),
+            showlegend=True,
+        )
     )
     st.plotly_chart(regime_fig, width="stretch")
 
@@ -504,27 +486,24 @@ with tabs[4]:
     miss_cols = [c for c in diag.columns if c.endswith("_missing")]
     if miss_cols:
         miss_fig = go.Figure()
-        for c in miss_cols:
+        for idx, c in enumerate(miss_cols):
             miss_fig.add_trace(
                 go.Scatter(
                     x=diag["date"],
                     y=diag[c],
                     mode="lines",
                     name=c.replace("_missing", ""),
-                    line=dict(width=1.5),
+                    line=dict(
+                        width=1.5,
+                        color=theme.CATEGORICAL[idx % len(theme.CATEGORICAL)],
+                    ),
                 )
             )
         miss_fig.update_layout(
-            template="plotly_dark",
-            height=300,
-            margin=dict(l=10, r=10, t=10, b=10),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        )
-        miss_fig.update_yaxes(
-            title="missing flag (0/1)",
-            range=[-0.05, 1.05],
-            showgrid=True,
-            gridcolor="rgba(255,255,255,0.06)",
+            **theme.chart_layout(
+                height=theme.H_SUB,
+                yaxis=dict(title="missing flag (0/1)", range=[-0.05, 1.05]),
+            )
         )
         st.plotly_chart(miss_fig, width="stretch")
     else:
@@ -544,7 +523,7 @@ with tabs[4]:
 with tabs[5]:
     st.markdown("### Playground — explore base models vs price")
 
-    pg_left, pg_right = st.columns([1.4, 1.0])
+    pg_left, pg_right = st.columns([1.6, 1.0])
 
     with pg_left:
         base_cols = ["signal_1", "signal_2", "signal_3", "signal_4", "signal_6"]
@@ -576,12 +555,12 @@ with tabs[5]:
                     x=merged_pg["date"],
                     y=merged_pg["close"],
                     name="BTC close",
-                    line=dict(color="#8AA4FF", width=2.0),
+                    line=dict(color=theme.COLORS["text"], width=2.0),
                     yaxis="y1",
                 )
             )
 
-            palette = ["#2EEB84", "#FF4D67", "#F5C84B", "#36CFC9", "#FF7A45"]
+            palette = theme.CATEGORICAL
             for idx, c in enumerate(chosen):
                 s = merged_pg[c].astype(float)
                 if smooth > 1:
@@ -599,21 +578,21 @@ with tabs[5]:
                 )
 
             fig_pg.update_layout(
-                template="plotly_dark",
-                height=520,
-                margin=dict(l=10, r=10, t=10, b=10),
-                xaxis=dict(domain=[0.0, 1.0]),
-                yaxis=dict(title="BTC close", side="left"),
-                yaxis2=dict(
-                    title="z-scored signals",
-                    overlaying="y",
-                    side="right",
-                    showgrid=False,
-                ),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                **theme.chart_layout(
+                    height=theme.H_HERO,
+                    xaxis=dict(domain=[0.0, 1.0]),
+                    yaxis=dict(title="BTC close", side="left"),
+                    yaxis2=dict(
+                        title="z-scored signals",
+                        overlaying="y",
+                        side="right",
+                        showgrid=False,
+                        zeroline=False,
+                        ticks="",
+                        linecolor=theme.COLORS["axis"],
+                    ),
+                )
             )
-            fig_pg.update_xaxes(showgrid=False)
-            fig_pg.update_yaxes(showgrid=True, gridcolor="rgba(255,255,255,0.06)")
 
             st.plotly_chart(fig_pg, width="stretch")
 

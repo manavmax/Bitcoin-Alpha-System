@@ -37,6 +37,9 @@ df = df.sort_values("timestamp").reset_index(drop=True)
 
 print("📅 Date range:", df["timestamp"].min(), "→", df["timestamp"].max())
 
+
+
+
 # -----------------------------
 # PRICE ACTION FEATURES
 # -----------------------------
@@ -89,6 +92,8 @@ df["target_return"] = df["log_return"].shift(-1)
 # -----------------------------
 # DROP NON-NUMERIC COLUMNS
 # -----------------------------
+# `close_time` is a text timestamp; the LSTM/TCN/N-BEATS nets were trained on the
+# numeric feature set, so keep that exact shape (24 inputs).
 non_numeric_cols = df.select_dtypes(include=["object"]).columns
 if len(non_numeric_cols) > 0:
     print("🧹 Dropping non-numeric columns:", list(non_numeric_cols))
@@ -97,8 +102,14 @@ if len(non_numeric_cols) > 0:
 # -----------------------------
 # FINAL CLEAN & SAVE
 # -----------------------------
-df = df.dropna().reset_index(drop=True)
+# Drop rows whose *features* are unusable (rolling-window warm-up), but KEEP the
+# most recent candle even though its target_return is unknown — Model 1 needs it
+# for same-day (live) inference. Training/evaluation paths drop the NaN target
+# themselves (see dataset.py `drop_na_target`).
+feature_cols = [c for c in df.columns if c != "target_return"]
+df = df.dropna(subset=feature_cols).reset_index(drop=True)
 
 df.to_parquet(OUTPUT_PARQUET, index=False)
 print(f"✅ Features saved to {OUTPUT_PARQUET}")
 print(f"📊 Total rows: {len(df)}")
+print(f"📅 Features date range: {df['timestamp'].min()} → {df['timestamp'].max()}")

@@ -27,7 +27,9 @@ MODELS_DIR = BASE_DIR / "models"
 OUTPUT_PATH = BASE_DIR / "results" / "model1_final_predictions.csv"
 
 # ---------------- DATA ----------------
-dataset = BTCSequenceDataset(seq_len=SEQ_LEN)
+# drop_na_target=False keeps the most recent candle (whose next-day return is not
+# known yet) so we can also emit a live signal for the current day.
+dataset = BTCSequenceDataset(seq_len=SEQ_LEN, drop_na_target=False)
 loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=False)
 
 # ---------------- LOAD MODELS ----------------
@@ -76,14 +78,22 @@ with torch.no_grad():
         targets.extend(y.numpy())
 
 # ---------------- SAVE OUTPUT ----------------
+# Prediction i (sequence starting at row i) targets row i + SEQ_LEN, so attach
+# that row's timestamp explicitly. build_dataset.py then merges Model 1 by date
+# instead of aligning it positionally from the end — positional alignment
+# silently shifted every prediction whenever the history length changed.
+pred_dates = pd.to_datetime(dataset.timestamps[SEQ_LEN:])
+
 df = pd.DataFrame({
-    "model1_return_prediction": np.array(final_preds),
-    "true_return": np.array(targets)
+    "date": pred_dates,
+    "model1_return_prediction": np.asarray(final_preds).reshape(-1),
+    "true_return": np.asarray(targets).reshape(-1),
 })
 
 df.to_csv(OUTPUT_PATH, index=False)
 
 print("✅ Model 1 ensemble completed")
 print(f"Saved final Model 1 predictions → {OUTPUT_PATH}")
+print(f"Rows: {len(df)} | date range: {df['date'].min()} → {df['date'].max()}")
 print("Weights used:",
       f"LSTM={W_LSTM}, TCN={W_TCN}, NBEATS={W_NBEATS}")

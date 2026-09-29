@@ -1,6 +1,8 @@
 import plotly.graph_objects as go
 import pandas as pd
 
+import theme
+
 
 def btc_price_chart(df):
     fig = go.Figure()
@@ -11,14 +13,15 @@ def btc_price_chart(df):
         high=df["high"],
         low=df["low"],
         close=df["close"],
-        name="BTC Price"
+        name="BTC Price",
+        **theme.CANDLE,
     ))
 
     fig.update_layout(
-        height=500,
-        xaxis_rangeslider_visible=False,
-        template="plotly_dark",
-        margin=dict(l=10, r=10, t=30, b=10)
+        **theme.chart_layout(
+            height=theme.H_HERO,
+            xaxis=dict(rangeslider=dict(visible=False)),
+        )
     )
 
     return fig
@@ -56,7 +59,7 @@ def signal_overlay(price_df, signal_df):
             x=longs["date"],
             y=longs["close"],
             mode="markers",
-            marker=dict(color="lime", size=7, symbol="triangle-up"),
+            marker=dict(theme.MARKER_LONG, size=7),
             name="LONG"
         ))
 
@@ -65,7 +68,7 @@ def signal_overlay(price_df, signal_df):
             x=shorts["date"],
             y=shorts["close"],
             mode="markers",
-            marker=dict(color="red", size=7, symbol="triangle-down"),
+            marker=dict(theme.MARKER_SHORT, size=7),
             name="SHORT"
         ))
 

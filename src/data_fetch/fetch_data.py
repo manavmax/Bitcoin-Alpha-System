@@ -227,24 +227,67 @@ def ensure_timeseries_df(df):
 # -------------------------
 # PRIMARY FETCHERS
 # -------------------------
-def fetch_ohlcv_binance(symbol="BTCUSDT", interval="1d", limit=2000):
+def fetch_ohlcv_binance(symbol="BTCUSDT", interval="1d", limit=1000):
+    """
+    Fetch daily klines from Binance.
+
+    Binance returns at most `limit` candles (hard max 1000) per request, so page
+    backwards until the requested history window is covered. A single request
+    only reaches ~1000 days back, which is why the price file used to start
+    mid-2023 and the merged Model 1 history ended at 2023-06-15.
+    """
     print("\n📥 Fetching OHLCV from Binance...")
     url = "https://api.binance.com/api/v3/klines"
-    params = {"symbol": symbol, "interval": interval, "limit": limit}
-    r = safe_request(url, params=params)
-    if not r:
-        print("⚠️ Binance request failed.")
-        return pd.DataFrame()
-    data = r.json()
     cols = ["open_time", "open", "high", "low", "close", "volume",
-            "close_time","quote_asset_volume","num_trades","taker_buy_base","taker_buy_quote","ignore"]
-    df = pd.DataFrame(data, columns=cols)
-    df = df[["open_time","open","high","low","close","volume"]]
+            "close_time", "quote_asset_volume", "num_trades",
+            "taker_buy_base", "taker_buy_quote", "ignore"]
+
+    start_ms = int(pd.Timestamp(START_DATE, tz="UTC").timestamp() * 1000)
+    frames = []
+    end_time = None
+
+    for _ in range(20):  # safety cap: 20 × 1000 candles ≈ 55 years
+        params = {"symbol": symbol, "interval": interval, "limit": limit}
+        if end_time is not None:
+            params["endTime"] = end_time
+        r = safe_request(url, params=params)
+        if not r:
+            print("⚠️ Binance request failed.")
+            break
+        data = r.json()
+        if not data:
+            break
+        frames.append(pd.DataFrame(data, columns=cols))
+        first_open = int(data[0][0])
+        if first_open <= start_ms:
+            break
+        end_time = first_open - 1
+
+    if not frames:
+        return pd.DataFrame()
+
+    df = pd.concat(frames, ignore_index=True)
     df["date"] = pd.to_datetime(df["open_time"], unit="ms", utc=True)
-    for c in ["open","high","low","close","volume"]:
+    df = (
+        df.drop_duplicates(subset=["date"])
+        .sort_values("date")
+        .reset_index(drop=True)
+    )
+
+    for c in ["open", "high", "low", "close", "volume",
+              "quote_asset_volume", "num_trades", "taker_buy_base",
+              "taker_buy_quote", "ignore"]:
         df[c] = pd.to_numeric(df[c], errors="coerce")
-    out = df[["date","open","high","low","close","volume"]].copy()
-    save_csv(out.rename(columns={"date":"open_time"}), "btc_price_daily")  # legacy name used in your repo
+
+    # Keep the auxiliary kline fields. Model 1's trained nets consume them as
+    # input features — dropping them here left every freshly synced row with NaNs
+    # for those columns, which silently truncated Model 1's feature history
+    # (the final dropna() removed everything after 2023-06-15).
+    out = df[["date", "open", "high", "low", "close", "volume",
+              "close_time", "quote_asset_volume", "num_trades",
+              "taker_buy_base", "taker_buy_quote", "ignore"]].copy()
+
+    save_csv(out.rename(columns={"date": "open_time"}), "btc_price_daily")  # legacy name used in your repo
     return out
 
 def compute_volatility_from_ohlcv(ohlcv_df):

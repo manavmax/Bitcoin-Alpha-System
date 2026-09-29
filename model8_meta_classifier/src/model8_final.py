@@ -76,8 +76,12 @@ def main():
     df["vol_regime"] = df["vol_regime"].fillna(1)
     df["macro_signal"] = df["macro_signal"].fillna(0.0)
 
-    # Derive macro regime
-    df["macro_regime"] = (df["macro_signal"] > 0).astype(int)
+    # Derive macro regime.
+    # NOTE: Model 8A was trained (see build_model8A_dataset.py) with
+    # macro_regime = 1  <=>  macro_signal < 0  (negative/bearish macro outlook).
+    # Inference MUST use the same convention, otherwise the 8A tradability gate
+    # receives an inverted feature and flips its decision.
+    df["macro_regime"] = (df["macro_signal"] < 0).astype(int)
 
     # --------------------------------------------------
     # Load models

@@ -19,6 +19,15 @@ SIGNALS = {
 OUT_FILE = "model8_meta_classifier/data/model8_dataset.csv"
 KEEP_LIVE_LAST_ROW = True  # keep latest row even if future_ret is NaN (needed for live inference)
 
+# Which candles make it onto the master timeline:
+#   "latest" (default) -> every candle the price sync produced, up to and
+#                         including the current UTC day, so the pipeline can
+#                         publish a signal that is actionable *today*.
+#   "closed"           -> strictly candles that have already closed
+#                         (date < today UTC) - the original behaviour.
+# Override at runtime with e.g.  MODEL8_CUTOFF=closed python run_daily_pipeline.py
+CUTOFF_MODE = os.getenv("MODEL8_CUTOFF", "latest").strip().lower()
+
 # ===============================
 # DATE NORMALIZATION (CRITICAL)
 # ===============================
@@ -41,11 +50,14 @@ def load_price():
 
     price = price.sort_values("date").reset_index(drop=True)
 
-    # IMPORTANT: only use fully closed daily candles.
-    # We assume that at runtime we do NOT want to include "today" (which may
-    # still be in-progress intraday), so we clip strictly before today's UTC date.
+    # IMPORTANT: by default the master timeline runs up to *today* (UTC) so the
+    # pipeline can publish a signal for the current day. Set MODEL8_CUTOFF=closed
+    # to go back to using only fully closed candles (date < today UTC).
     today_utc = datetime.now(timezone.utc).date()
-    price = price[price["date"].dt.date < today_utc].reset_index(drop=True)
+    if CUTOFF_MODE == "closed":
+        price = price[price["date"].dt.date < today_utc].reset_index(drop=True)
+    else:
+        price = price[price["date"].dt.date <= today_utc].reset_index(drop=True)
     price["future_ret"] = price["Close"].pct_change().shift(-1)
     return price[["date", "future_ret"]]
 

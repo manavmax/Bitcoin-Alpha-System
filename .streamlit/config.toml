@@ -1,0 +1,72 @@
+# =============================================================================
+# Bitcoin Alpha System -- presentation layer only.
+#
+# Bloomberg-terminal direction. Mirrors the tokens in
+# model8_meta_classifier/model8_ui/theme.py -- change a value in both places.
+#
+# Streamlit reads this file from the current working directory, so run the app
+# from the repository root (the same convention the data paths in app.py use).
+#
+# Palette: pure-black terminal, white/gray/dim type, single amber accent.
+# Type:    Helvetica for chrome, SF Mono for data -- system stacks only.
+# Radius:  0px everywhere. Panels are hairline boxes, not cards.
+# =============================================================================
+
+[theme]
+base = "dark"
+
+# --- accent: active tab, focus, strategy line, primary buttons -------------
+primaryColor = "#FF9E2C"
+linkColor = "#FFB35C"
+
+# --- surfaces & type: black terminal ---------------------------------------
+backgroundColor = "#000000"
+secondaryBackgroundColor = "#0D0D0F"
+textColor = "#F2F2F2"
+
+# --- strokes: 1px rules, no shadows ----------------------------------------
+borderColor = "#2A2A2E"
+showWidgetBorder = true
+showSidebarBorder = true
+
+# --- radius system: square corners everywhere -------------------------------
+baseRadius = "0px"
+buttonRadius = "0px"
+
+# --- typography: sans chrome, mono data ------------------------------------
+font = "'Helvetica Neue', Helvetica, Arial, 'Segoe UI', sans-serif"
+headingFont = "'Helvetica Neue', Helvetica, Arial, 'Segoe UI', sans-serif"
+codeFont = "'SF Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace"
+
+baseFontSize = 14
+baseFontWeight = 400
+codeFontSize = "0.75rem"
+metricValueFontSize = "1.375rem"
+metricValueFontWeight = 700
+
+# h1 28 / h2 16 / h3 13 / h4 12 / h5 11 / h6 10 -- small ruled section heads
+headingFontSizes = ["1.75rem", "1rem", "0.8125rem", "0.75rem", "0.6875rem", "0.625rem"]
+headingFontWeights = [700, 700, 700, 700, 700, 700]
+
+# --- data grids: hairline frame, dark header --------------------------------
+dataframeBorderColor = "#2A2A2E"
+dataframeHeaderBackgroundColor = "#0D0D0F"
+
+# --- semantic palette: terminal green / red ---------------------------------
+redColor = "#FF453A"
+orangeColor = "#FF9E2C"
+yellowColor = "#FFB300"
+blueColor = "#4D9DE0"
+greenColor = "#00D97A"
+violetColor = "#B79CFF"
+grayColor = "#8E8E93"
+
+# --- chart palettes ----------------------------------------------------------
+chartCategoricalColors = ["#4D9DE0", "#00D97A", "#FF9E2C", "#B79CFF", "#FF4D4D"]
+chartSequentialColors = ["#1A1A1C", "#2E2E33", "#4A4A52", "#6E6E78", "#9A9AA3", "#CFCFD4"]
+chartDivergingColors = ["#FF4D4D", "#A35A5A", "#8E8E93", "#4E9E7E", "#00D97A"]
+
+[theme.sidebar]
+backgroundColor = "#000000"
+secondaryBackgroundColor = "#0D0D0F"
+borderColor = "#2A2A2E"

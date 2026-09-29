@@ -8,7 +8,18 @@ from pathlib import Path
 from sklearn.preprocessing import StandardScaler
 
 class BTCSequenceDataset(Dataset):
-    def __init__(self, seq_len=30):
+    def __init__(self, seq_len=30, drop_na_target=True):
+        """
+        Parameters
+        ----------
+        seq_len : int
+            Length of each input sequence.
+        drop_na_target : bool
+            True (default) drops the most recent candle, whose next-day return is
+            not known yet. Training and evaluation must use this so no NaN label
+            ever reaches the loss. Live inference (model1_ensemble.py) sets it to
+            False so the model can emit a signal for the current day.
+        """
         self.seq_len = seq_len
 
         base_dir = Path(__file__).resolve().parents[1]
@@ -16,11 +27,17 @@ class BTCSequenceDataset(Dataset):
 
         df = pd.read_parquet(data_path)
 
+        if drop_na_target:
+            df = df.dropna(subset=["target_return"]).reset_index(drop=True)
+
         if len(df) <= seq_len:
             raise ValueError("Not enough data to create sequences")
 
         # TARGET: next-day return
         self.target = df["target_return"].values.astype(np.float32)
+
+        # Timestamps, so callers can attach an explicit date to each prediction
+        self.timestamps = df["timestamp"].values
 
         # FEATURES
         features = df.drop(columns=[

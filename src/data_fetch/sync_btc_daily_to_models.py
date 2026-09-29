@@ -63,11 +63,35 @@ def sync_one(target_path: Path, df_new: pd.DataFrame) -> None:
 
     df_append["open_dt"] = df_new["open_dt"].values
 
+    # Carry the auxiliary kline fields through as well. Model 1's LSTM/TCN/N-BEATS
+    # were trained with these as inputs; leaving them NaN truncated the feature
+    # history at 2023-06-15 and broke inference.
+    AUX_MAP = {
+        "close_time": "Close time",
+        "quote_asset_volume": "Quote asset volume",
+        "num_trades": "Number of trades",
+        "taker_buy_base": "Taker buy base asset volume",
+        "taker_buy_quote": "Taker buy quote asset volume",
+        "ignore": "Ignore",
+    }
+    for src_col, tgt_col in AUX_MAP.items():
+        if tgt_col not in df_append.columns or src_col not in df_new.columns:
+            continue
+        if src_col == "close_time":
+            ct = pd.to_datetime(df_new[src_col], utc=True, errors="coerce")
+            df_append[tgt_col] = ct.dt.strftime("%Y-%m-%d %H:%M:%S.%f UTC")
+        else:
+            df_append[tgt_col] = pd.to_numeric(df_new[src_col], errors="coerce")
+
     merged = pd.concat(
         [df_old[cols + ["open_dt"]], df_append[cols + ["open_dt"]]],
         ignore_index=True,
     )
-    merged = merged.sort_values("open_dt")
+    # Newly fetched rows must win for any date they share with the existing file.
+    # Sort stably (existing rows first, new rows last) before de-duplicating —
+    # the default quicksort is not stable, so keep="last" could otherwise keep the
+    # stale row (which is how ~600 rows ended up with NaN auxiliary columns).
+    merged = merged.sort_values("open_dt", kind="stable")
     merged = merged.drop_duplicates(subset=["open_dt"], keep="last")
     merged = merged.drop(columns=["open_dt"])
 
