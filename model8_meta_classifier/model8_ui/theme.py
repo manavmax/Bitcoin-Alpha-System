@@ -522,11 +522,10 @@ CANDLE = {
     "increasing_fillcolor": "#000000",
     "increasing_line_color": COLORS["long"],
     "increasing_line_width": 1,
-    "increasing_whisker_width": 1,
     "decreasing_fillcolor": COLORS["short"],
     "decreasing_line_color": COLORS["short"],
     "decreasing_line_width": 1,
-    "decreasing_whisker_width": 1,
+    "whiskerwidth": 1,
 }
 MARKER_LONG = {"symbol": "triangle-up", "size": 8, "color": COLORS["long"]}
 MARKER_SHORT = {"symbol": "triangle-down", "size": 8, "color": COLORS["short"]}
