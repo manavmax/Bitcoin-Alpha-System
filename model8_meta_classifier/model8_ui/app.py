@@ -56,7 +56,7 @@ live_price = fetch_live_btc()
 # =====================================================
 # LOAD DAILY DATA (NORMALIZED DATES)
 # =====================================================
-@st.cache_data
+@st.cache_data(ttl=300)
 def load_price():
     df = pd.read_csv(DATA_PRICE)
     # Support both legacy 'open_time' and 'date' columns
@@ -67,13 +67,13 @@ def load_price():
     df["date"] = pd.to_datetime(df[ts_col], utc=True).dt.date
     return df.sort_values("date")[["date", "open", "high", "low", "close", "volume"]]
 
-@st.cache_data
+@st.cache_data(ttl=300)
 def load_signal():
     df = pd.read_csv(DATA_SIGNAL)
     df["date"] = pd.to_datetime(df["date"], utc=True).dt.date
     return df.sort_values("date")
 
-@st.cache_data
+@st.cache_data(ttl=300)
 def load_model8_dataset():
     df = pd.read_csv(DATA_MODEL8)
     df["date"] = pd.to_datetime(df["date"], utc=True).dt.date

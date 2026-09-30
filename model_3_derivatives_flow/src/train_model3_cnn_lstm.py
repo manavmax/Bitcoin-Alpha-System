@@ -1,3 +1,5 @@
+import os
+
 import pandas as pd
 import numpy as np
 import torch
@@ -37,6 +39,12 @@ FEATURES = [
 ]
 
 TARGET = "target_return"
+
+# ==================== RUN MODE ====================
+# Default = inference-only: load the saved weights and only ingest new data
+# (this is what the daily pipeline runs). Set MODEL3_RETRAIN=1 to retrain the
+# network from scratch (e.g. occasionally, or after feature changes).
+RETRAIN = os.getenv("MODEL3_RETRAIN", "0").strip().lower() in {"1", "true", "yes"}
 
 # ==================== DATASET ====================
 class SequenceDataset(Dataset):
@@ -106,30 +114,42 @@ test_loader  = DataLoader(test_ds, batch_size=BATCH_SIZE, shuffle=False)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = CNNLSTM(len(FEATURES)).to(device)
 
-optimizer = torch.optim.Adam(model.parameters(), lr=LR)
-loss_fn = nn.MSELoss()
+ckpt = MODEL_OUT / "model3_cnn_lstm.pt"
 
-print("🚀 Training Model 3 CNN-LSTM...")
+if RETRAIN:
+    optimizer = torch.optim.Adam(model.parameters(), lr=LR)
+    loss_fn = nn.MSELoss()
 
-for epoch in range(1, EPOCHS + 1):
-    model.train()
-    losses = []
+    print("🚀 Training Model 3 CNN-LSTM...")
 
-    for x, y in train_loader:
-        x, y = x.to(device), y.to(device)
+    for epoch in range(1, EPOCHS + 1):
+        model.train()
+        losses = []
 
-        optimizer.zero_grad()
-        preds = model(x)
-        loss = loss_fn(preds, y)
-        loss.backward()
-        optimizer.step()
+        for x, y in train_loader:
+            x, y = x.to(device), y.to(device)
 
-        losses.append(loss.item())
+            optimizer.zero_grad()
+            preds = model(x)
+            loss = loss_fn(preds, y)
+            loss.backward()
+            optimizer.step()
 
-    print(f"Epoch {epoch}/{EPOCHS} | MSE: {np.mean(losses):.6f}")
+            losses.append(loss.item())
 
-# ==================== SAVE MODEL ====================
-torch.save(model.state_dict(), MODEL_OUT / "model3_cnn_lstm.pt")
+        print(f"Epoch {epoch}/{EPOCHS} | MSE: {np.mean(losses):.6f}")
+
+    # ==================== SAVE MODEL ====================
+    torch.save(model.state_dict(), ckpt)
+else:
+    if not ckpt.exists():
+        raise FileNotFoundError(
+            f"❌ {ckpt} not found. Train once with MODEL3_RETRAIN=1 "
+            f"before running in inference-only mode."
+        )
+    model.load_state_dict(torch.load(ckpt, map_location=device))
+    print(f"✅ Loaded trained Model 3 CNN-LSTM weights from {ckpt.name} "
+          f"(inference-only; set MODEL3_RETRAIN=1 to retrain)")
 
 # ==================== EVALUATION (TEST SLICE) ====================
 model.eval()
@@ -171,4 +191,4 @@ full_out["cnn_lstm_pred"] = full_preds
 RESULTS_OUT.mkdir(exist_ok=True)
 full_out.to_csv(RESULTS_OUT / "model3_cnn_lstm_predictions.csv", index=False)
 
-print("✅ Model 3 CNN-LSTM training + full-history predictions completed")
+print(f"✅ Model 3 CNN-LSTM {'training + ' if RETRAIN else 'inference-only '}full-history predictions completed")

@@ -126,12 +126,12 @@ if __name__ == "__main__":
         env_var="COINALYZE_API_KEY",
     )
     run_optional(
-        "Train Model 3 TCN and write latest predictions",
+        "Model 3 TCN — inference with trained weights (MODEL3_RETRAIN=1 to retrain)",
         BASE_DIR / "model_3_derivatives_flow" / "src" / "train_model3_tcn.py",
         env_var="COINALYZE_API_KEY",
     )
     run_optional(
-        "Train Model 3 CNN-LSTM and write latest predictions",
+        "Model 3 CNN-LSTM — inference with trained weights (MODEL3_RETRAIN=1 to retrain)",
         BASE_DIR / "model_3_derivatives_flow" / "src" / "train_model3_cnn_lstm.py",
         env_var="COINALYZE_API_KEY",
     )
