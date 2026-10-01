@@ -177,6 +177,19 @@ def main():
               "(candle had not closed when they were published)")
         published = published.loc[~unclosed]
 
+    # Optional, explicit override: MODEL8_REFRESH_DATES=YYYY-MM-DD[,..]
+    # recomputes ONLY the listed already-published dates from the current
+    # dataset (they are dropped from the frozen set and re-appended below).
+    # Use when a base signal was unavailable at first publish (e.g. signal_4
+    # arriving late from Blockchain.com). All other rows stay immutable.
+    refresh_raw = [d.strip() for d in os.getenv("MODEL8_REFRESH_DATES", "").split(",") if d.strip()]
+    if refresh_raw:
+        refresh_set = {pd.to_datetime(d, utc=True) for d in refresh_raw}
+        n_refresh = int(published["date"].isin(refresh_set).sum())
+        published = published[~published["date"].isin(refresh_set)]
+        print(f"⚠️ MODEL8_REFRESH_DATES={refresh_raw}: re-publishing "
+              f"{n_refresh} previously-published row(s) from the current dataset")
+
     published_dates = set(published["date"])
     new_rows = fresh[~fresh["date"].isin(published_dates)]
 
