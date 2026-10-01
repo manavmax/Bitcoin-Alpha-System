@@ -92,10 +92,11 @@ if __name__ == "__main__":
         / "src"
         / "fetch_blockchain_com.py",
     )
+    # CoinMetrics' Community API is free and keyless; a paid key (if present)
+    # additionally unlocks the Pro-tier metrics inside this script.
     run_optional(
         "On-chain fundamentals from CoinMetrics (fallback for missing Blockchain.com days)",
         BASE_DIR / "model_4_onchain_fundamentals" / "src" / "fetch_coinmetrics_onchain.py",
-        env_var="COINMETRICS_API_KEY",
     )
 
     # Derivatives / Coinalyze for Model 3 (optional: requires COINALYZE_API_KEY)

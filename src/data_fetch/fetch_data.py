@@ -57,7 +57,7 @@ REQUIRED_ONCHAIN_METRICS = [
 METRIC_SOURCE_MAP = {
     # default: try CoinMetrics first then ChartInspect then Blockchair etc.
     # If a metric has a special mapping name on CoinMetrics specify here.
-    "mvrv-data": ["chartinspect", "coinmetrics", "blockchair"],
+    "mvrv-data": ["coinmetrics", "chartinspect", "blockchair"],
     "sopr": ["chartinspect", "coinmetrics"],
     "nupl": ["chartinspect", "coinmetrics"],
     "active-addresses": ["coinmetrics", "chartinspect", "bitquery", "blockchair"],
@@ -70,23 +70,40 @@ METRIC_SOURCE_MAP = {
     "tx_revenue_usd": ["coinmetrics"],
 }
 
-# CoinMetrics metric name map (if differs). Use empty to attempt the same name.
+# CoinMetrics metric name map (local name -> CoinMetrics v4 metric name).
+# Names verified against the CoinMetrics v4 catalog. Community-tier names are
+# consumable with no API key (free community-api.coinmetrics.io host); names in
+# COINMETRICS_PAID_ONLY are valid but require paid (Pro) credentials, so they
+# are only attempted when COINMETRICS_API_KEY is set.
 COINMETRICS_NAME_MAP = {
-    "tx_volume_usd": "TxTfrValUSD",
-    "tx_count": "TxCnt",
-    "difficulty": "Difficulty",
+    # Free Community tier (no key needed):
+    "mvrv-data": "CapMVRVCur",
+    "active-addresses": "AdrActCnt",
+    "transaction-count": "TxCnt",
     "hashrate": "HashRate",
-    "miner-revenue": "MinerRevenueUSD",
-    "tx_revenue_usd": "TxTfrValUSD",
-    "active-addresses": "ActiveAddresses",
-    # others left blank: coinmetrics may not have direct mapping for 'mvrv-data' etc
+    "tx_count": "TxCnt",
+    # Paid (Pro) tier — attempted only when an API key is configured:
+    "difficulty": "DiffMean",
+    "miner-revenue": "RevUSD",
+    "tx_volume_usd": "TxTfrValUSD",
+    "tx_revenue_usd": "FeeTotUSD",
+    # 'sopr' / 'nupl' have no CoinMetrics v4 metric — served by other providers.
 }
+
+# Valid CoinMetrics metric names that the free Community API rejects (403).
+COINMETRICS_PAID_ONLY = {"DiffMean", "RevUSD", "TxTfrValUSD", "FeeTotUSD"}
 
 # ChartInspect endpoints: uses path `/api/v1/onchain/{metric}`
 CHARTINSPECT_BASE = "https://chartinspect.com/api/v1/onchain"
 
-# CoinMetrics API (free endpoints exist; some require API key)
-COINMETRICS_BASE = "https://api.coinmetrics.io/v4"
+# CoinMetrics API — the Community API is free and needs no key; the Pro API
+# requires credentials (COINMETRICS_API_KEY). Use the Pro host only when a key
+# is available, otherwise everyone would get 401s against api.coinmetrics.io.
+COINMETRICS_BASE = (
+    "https://api.coinmetrics.io/v4"
+    if COINMETRICS_KEY
+    else "https://community-api.coinmetrics.io/v4"
+)
 
 # Blockchair snapshot endpoints (limited) - used as fallback where available
 # Bitquery GraphQL used as optional fallback (requires API key)
@@ -325,59 +342,89 @@ def fetch_derivatives_binance_funding(symbol="BTCUSDT", limit=1000):
 # -------------------------
 def fetch_onchain_coinmetrics(metrics, start=START_DATE, end=END_DATE, asset="btc"):
     """
-    Attempt to fetch multiple metrics from CoinMetrics community timeseries endpoint.
-    Returns a DataFrame if successful (wide format).
+    Fetch metrics from the CoinMetrics v4 timeseries endpoint.
+
+    Uses the free Community API (community-api.coinmetrics.io, no key needed)
+    when COINMETRICS_API_KEY is not set, and the Pro API when it is. Returns a
+    DataFrame if successful (wide format).
     """
     print(" → Trying CoinMetrics...")
-    # Build metrics list with coinmetrics names if provided
+    # Resolve CoinMetrics metric names. Metrics with no CoinMetrics equivalent
+    # (e.g. SOPR/NUPL) are skipped instead of sending invalid names that 400.
     cm_metrics = []
     for m in metrics:
-        cm_name = COINMETRICS_NAME_MAP.get(m, "")
-        cm_metrics.append(cm_name if cm_name else m)
-    cm_metrics = [c for c in cm_metrics if c]
+        cm_name = COINMETRICS_NAME_MAP.get(m)
+        if not cm_name:
+            print(f"   ↷ CoinMetrics has no '{m}' metric — skipping provider")
+            continue
+        cm_metrics.append(cm_name)
+    if not cm_metrics:
+        return None
+
+    # Paid (Pro) names are valid but the free Community API rejects them (403);
+    # don't attempt them without a key so the logs stay clean.
+    if not COINMETRICS_KEY:
+        paid = [c for c in cm_metrics if c in COINMETRICS_PAID_ONLY]
+        if paid:
+            print(f"   ↷ CoinMetrics {', '.join(paid)} requires a paid API key — skipping")
+            return None
+
     params = {
         "assets": asset,
         "metrics": ",".join(cm_metrics),
         "start_time": start.strftime("%Y-%m-%d"),
         "end_time": end.strftime("%Y-%m-%d"),
-        "frequency": "1d"
+        "frequency": "1d",
+        # The API default page size is 100 rows (last ~100 days only!) — ask
+        # for the full history and follow next_page_token below.
+        "page_size": 10000,
     }
     url = f"{COINMETRICS_BASE}/timeseries/asset-metrics"
     headers = {}
     if COINMETRICS_KEY:
         headers["Authorization"] = f"Bearer {COINMETRICS_KEY}"
-    r = safe_request(url, params=params, headers=headers)
-    if not r:
+
+    rows = []
+    for _ in range(20):  # safety cap (20 × 10k rows covers ~55 years of dailies)
+        r = safe_request(url, params=params, headers=headers)
+        if not r:
+            break
+        try:
+            payload = r.json()
+        except Exception as e:
+            print("⚠️ CoinMetrics parse error:", e)
+            break
+        page = payload.get("data") if isinstance(payload, dict) else None
+        if isinstance(page, list):
+            rows.extend(page)
+        token = payload.get("next_page_token") if isinstance(payload, dict) else None
+        if not token:
+            break
+        params["next_page_token"] = token
+
+    if not rows:
         return None
-    try:
-        payload = r.json()
-    except Exception as e:
-        print("⚠️ CoinMetrics parse error:", e)
+
+    # coinmetrics rows look like {"asset":.., "time":.., "<MetricName>":..}
+    df = parse_timeseries_json({"data": rows})
+    if df is None or df.empty:
         return None
-    # coinmetrics returns {"data": [{"time":.., "asset":.., "metric":.., "value":..}, ...]} or timeseries mapping
-    df = parse_timeseries_json(payload)
-    if df is None:
-        # try specialized handling: payload may have 'data' as list of rows (time, metric, value)
-        if isinstance(payload, dict) and "data" in payload:
-            try:
-                rows = payload["data"]
-                df = pd.DataFrame(rows)
-                # pivot metric->columns if metric present
-                if "metric" in df.columns and "value" in df.columns and "time" in df.columns:
-                    df_piv = df.pivot_table(index="time", columns="metric", values="value").reset_index().rename(columns={"time":"date"})
-                    df_piv["date"] = pd.to_datetime(df_piv["date"], utc=True)
-                    return df_piv
-            except Exception:
-                return None
+    # drop the per-row 'asset' column; it is not needed downstream
+    if "asset" in df.columns:
+        df = df.drop(columns=["asset"])
+    # metric values arrive as strings — coerce so the downstream
+    # collapse/rename logic (ensure_timeseries_df) treats them as numeric
+    for c in df.columns:
+        if c != "date":
+            df[c] = pd.to_numeric(df[c], errors="coerce")
     return df
 
 def fetch_onchain_chartinspect(metric, days=1095):
-    """Fetch single metric from ChartInspect. Needs CHARTINSPECT_KEY for authenticated endpoints."""
+    """Fetch single metric from ChartInspect. Requires CHARTINSPECT_KEY (endpoints are authenticated)."""
     if not CHARTINSPECT_KEY:
-        # still attempt (some endpoints might be public)
-        headers = {}
-    else:
-        headers = {"X-API-Key": CHARTINSPECT_KEY}
+        print("   ↷ ChartInspect requires CHARTINSPECT_KEY — skipping")
+        return None
+    headers = {"X-API-Key": CHARTINSPECT_KEY}
     url = f"{CHARTINSPECT_BASE}/{metric}"
     params = {"days": days}
     r = safe_request(url, params=params, headers=headers)
