@@ -40,4 +40,5 @@ class NBeats(nn.Module):
             residual = residual - backcast
             forecast = forecast + forecast_step
 
-        return forecast.squeeze()
+        # squeeze(-1) keeps the batch dimension for single-sample final batches.
+        return forecast.squeeze(-1)

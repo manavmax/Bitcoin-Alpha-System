@@ -98,7 +98,8 @@ class CNNLSTM(nn.Module):
 
         out, _ = self.lstm(x)
         out = out[:, -1, :]
-        return self.fc(out).squeeze()
+        # squeeze(-1) keeps the batch dimension for single-sample final batches.
+        return self.fc(out).squeeze(-1)
 
 # ==================== LOAD DATA ====================
 train_df = pd.read_csv(TRAIN_FILE)

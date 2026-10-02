@@ -20,4 +20,7 @@ class LSTMPricePredictor(nn.Module):
     def forward(self, x):
         out, _ = self.lstm(x)
         out = out[:, -1, :]
-        return self.fc(out).squeeze()
+        # squeeze(-1) (not squeeze()) keeps the batch dimension even when the
+        # final batch has a single sample; squeeze() would collapse it to a 0-d
+        # scalar and break `extend(pred.cpu().numpy())` in the ensemble loop.
+        return self.fc(out).squeeze(-1)

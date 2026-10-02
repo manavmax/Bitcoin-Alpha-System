@@ -86,4 +86,5 @@ class TCN(nn.Module):
         x = x.transpose(1, 2)  # (batch, features, seq_len)
         out = self.network(x)
         out = out[:, :, -1]    # last time step
-        return self.fc(out).squeeze()
+        # squeeze(-1) keeps the batch dimension for single-sample final batches.
+        return self.fc(out).squeeze(-1)

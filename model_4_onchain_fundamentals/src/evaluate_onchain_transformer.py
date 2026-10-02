@@ -49,7 +49,7 @@ class OnChainTransformer(nn.Module):
     def forward(self, x):
         x = self.embed(x)
         x = self.encoder(x)
-        return self.fc(x[:, -1]).squeeze()
+        return self.fc(x[:, -1]).squeeze(-1)
 
 # =========================
 # LOAD MODEL

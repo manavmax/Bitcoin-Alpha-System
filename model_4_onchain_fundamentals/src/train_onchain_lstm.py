@@ -63,7 +63,7 @@ class OnChainLSTM(nn.Module):
 
     def forward(self, x):
         out, _ = self.lstm(x)
-        return self.fc(out[:, -1, :]).squeeze()
+        return self.fc(out[:, -1, :]).squeeze(-1)
 
 # =========================
 # Load & Prepare Data

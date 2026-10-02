@@ -120,8 +120,8 @@ transformer.eval()
 # INFERENCE
 # =============================
 with torch.no_grad():
-    lstm_pred = lstm(X_lstm).squeeze().numpy()
-    tr_pred   = transformer(X_tr).squeeze().numpy()
+    lstm_pred = lstm(X_lstm).squeeze(-1).numpy()
+    tr_pred   = transformer(X_tr).squeeze(-1).numpy()
 
 # =============================
 # ENSEMBLE

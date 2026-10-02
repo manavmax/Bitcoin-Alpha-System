@@ -84,7 +84,8 @@ class TCN(nn.Module):
     def forward(self, x):
         x = x.transpose(1, 2)
         y = self.net(x)
-        return y[:, :, -1].squeeze()
+        # squeeze(-1) keeps the batch dimension for single-sample final batches.
+        return y[:, :, -1].squeeze(-1)
 
 # ==================== LOAD DATA ====================
 train_df = pd.read_csv(TRAIN_FILE)

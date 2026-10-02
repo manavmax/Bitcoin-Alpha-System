@@ -15,4 +15,5 @@ class VolatilityLSTM(nn.Module):
 
     def forward(self, x):
         out, _ = self.lstm(x)
-        return self.fc(out[:, -1, :]).squeeze()
+        # squeeze(-1) keeps the batch dimension for single-sample final batches.
+        return self.fc(out[:, -1, :]).squeeze(-1)

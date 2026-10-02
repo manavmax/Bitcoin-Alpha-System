@@ -27,4 +27,4 @@ class OnChainTransformer(nn.Module):
         x = self.embedding(x)
         x = self.transformer(x)
         out = self.fc(x[:, -1, :])
-        return out.squeeze()
+        return out.squeeze(-1)
