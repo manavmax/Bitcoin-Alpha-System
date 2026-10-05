@@ -2,6 +2,7 @@
 
 import pandas as pd
 import numpy as np
+from datetime import datetime, timezone
 from pathlib import Path
 
 RAW = Path("model_6_macro_liquidity/raw/fred")
@@ -34,8 +35,16 @@ df = pd.concat(
     axis=1
 ).sort_index()
 
-# Build a true daily calendar (crypto trades 24/7; macro releases are sparse)
-daily_index = pd.date_range(df.index.min(), df.index.max(), freq="D")
+# Build a true daily calendar (crypto trades 24/7; macro releases are sparse).
+# The calendar must extend through *today*, not just to the last FRED
+# observation: FRED series lag real time (publication lags + weekends), e.g.
+# SP500/T10Y2Y often end 1-3 days behind the BTC master timeline. If we
+# stopped at df.index.max(), Model 6 would emit no signal for the most recent
+# days and the Model 8 dataset would flag signal_6 as missing. Macro values
+# beyond the last release are carried forward below (same rule as weekends).
+today = pd.Timestamp(datetime.now(timezone.utc).date())
+end_date = max(df.index.max(), today)
+daily_index = pd.date_range(df.index.min(), end_date, freq="D")
 df = df.reindex(daily_index)
 
 # Forward-fill macro data (hold last published value until next release)
