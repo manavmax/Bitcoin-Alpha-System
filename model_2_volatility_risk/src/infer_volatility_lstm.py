@@ -5,6 +5,13 @@ from pathlib import Path
 
 from volatility_lstm import VolatilityLSTM
 
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from src.prediction_store import publish_append_only  # noqa: E402
+
 
 BASE = Path(__file__).resolve().parents[1]
 
@@ -50,7 +57,8 @@ def main():
     out["lstm_volatility"] = preds
 
     OUT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    out.to_csv(OUT_FILE, index=False)
+    # Append-only publication: previously published predictions are immutable.
+    publish_append_only(out, OUT_FILE, refresh_env="MODEL2_LSTM_REFRESH_DATES")
 
     print("✅ Volatility LSTM inference completed")
     print(f"Saved → {OUT_FILE}")

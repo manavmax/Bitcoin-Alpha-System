@@ -90,6 +90,30 @@ decision. This is the same code path used whether you're backtesting historicall
 against today's data — one pipeline, not a research version and a separate production version
 that can quietly drift apart from each other.
 
+### Immutable predictions (models 1–8)
+
+Every published prediction file goes through `src/prediction_store.py::publish_append_only`,
+which enforces one rule: **a prediction, once published for a UTC date, can never be changed.**
+
+- A daily run may only APPEND rows for newly closed dates. Rerunning the pipeline never
+  recomputes, revises, or rewrites an already-published prediction — even if a model is
+  retrained or its input features drift.
+- Predictions for candles that have not closed yet (date >= today, UTC) are never published;
+  any that slip into a store are purged on the next run.
+- Ground-truth outcome columns (`true_return`, `target_return`, `realized_vol`, `future_ret`)
+  are the only cells that may be filled in later — an outcome is not a prediction, so
+  backfilling it never touches a published value. Same-day reruns are byte-identical.
+- Escape hatch: to deliberately re-publish specific past dates (e.g. a base signal arrived
+  late), set the model's refresh env var to a comma-separated date list — e.g.
+  `MODEL1_REFRESH_DATES=2026-10-05`. Every other row stays frozen. Per-model vars:
+  `MODEL{1,2,3,4,6,7,8}_REFRESH_DATES` plus `MODEL2_LSTM_REFRESH_DATES`,
+  `MODEL2_LSTM_TRAIN_REFRESH_DATES`, `MODEL3_TCN_REFRESH_DATES`,
+  `MODEL3_CNN_LSTM_REFRESH_DATES`, `MODEL7_1_REFRESH_DATES`, `MODEL7_3_REFRESH_DATES`,
+  `MODEL8_BACKEND_REFRESH_DATES`, `MODEL8_XGB_REFRESH_DATES`.
+
+Git history of the `results/` CSVs is therefore a complete audit log: each daily commit shows
+exactly what was known and predicted at that time.
+
 ## Dashboard
 
 `dashboard/` visualizes what the pipeline is actually doing day to day — signal history,

@@ -1,6 +1,14 @@
 import pandas as pd
 import numpy as np
 
+import sys
+from pathlib import Path
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from src.prediction_store import publish_append_only  # noqa: E402
+
 # =============================
 # CONFIG
 # =============================
@@ -146,10 +154,11 @@ def main():
     out = price.copy()
     out["model7_signal"] = ensemble
 
-    out.to_csv(OUTPUT_FILE, index=False)
+    # Append-only publication: previously published predictions are immutable.
+    publish_append_only(out, OUTPUT_FILE, refresh_env="MODEL7_REFRESH_DATES")
 
     print("✅ MODEL 7 COMPLETE")
-    print(f"Saved → {OUTPUT_FILE}")
+    print(f"Published → {OUTPUT_FILE}")
 
 # =============================
 if __name__ == "__main__":

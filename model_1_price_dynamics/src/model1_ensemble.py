@@ -11,6 +11,13 @@ from model import LSTMPricePredictor
 from tcn_model import TCN
 from nbeats_model import NBeats
 
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from src.prediction_store import publish_append_only  # noqa: E402
+
 # ---------------- CONFIG ----------------
 SEQ_LEN = 30
 BATCH_SIZE = 32
@@ -90,10 +97,19 @@ df = pd.DataFrame({
     "true_return": np.asarray(targets).reshape(-1),
 })
 
-df.to_csv(OUTPUT_PATH, index=False)
+# ---------------- SAVE OUTPUT ----------------
+# Append-only publication: previously published predictions are immutable.
+# Only new dates are appended; `true_return` (the ground-truth outcome, which
+# is unknown on publication day) is backfilled once it becomes known.
+publish_append_only(
+    df,
+    OUTPUT_PATH,
+    backfill_cols=("true_return",),
+    refresh_env="MODEL1_REFRESH_DATES",
+)
 
 print("✅ Model 1 ensemble completed")
-print(f"Saved final Model 1 predictions → {OUTPUT_PATH}")
+print(f"Published predictions → {OUTPUT_PATH}")
 print(f"Rows: {len(df)} | date range: {df['date'].min()} → {df['date'].max()}")
 print("Weights used:",
       f"LSTM={W_LSTM}, TCN={W_TCN}, NBEATS={W_NBEATS}")

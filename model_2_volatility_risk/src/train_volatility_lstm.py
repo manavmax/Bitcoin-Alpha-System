@@ -8,6 +8,13 @@ from volatility_dataset import VolatilitySequenceDataset
 from volatility_lstm import VolatilityLSTM
 from pathlib import Path
 
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from src.prediction_store import publish_append_only  # noqa: E402
+
 # =====================
 # Paths
 # =====================
@@ -120,7 +127,19 @@ torch.save(model.state_dict(), MODEL_FILE)
 
 out = df.iloc[-len(preds):].copy()
 out["lstm_volatility"] = preds
-out.to_csv(PRED_FILE, index=False)
+
+# =====================
+# Save (append-only publication)
+# =====================
+# Previously published predictions are immutable; only new dates are appended
+# even when this training script is rerun. `realized_vol` (ground truth,
+# unknown on publication day) is backfilled once it becomes known.
+publish_append_only(
+    out,
+    PRED_FILE,
+    backfill_cols=("realized_vol",),
+    refresh_env="MODEL2_LSTM_TRAIN_REFRESH_DATES",
+)
 
 print("✅ Volatility LSTM training completed")
 print(f"Model saved → {MODEL_FILE}")

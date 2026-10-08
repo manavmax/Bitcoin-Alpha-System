@@ -6,6 +6,13 @@ import torch
 from volatility_lstm import VolatilityLSTM
 from pathlib import Path
 
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from src.prediction_store import publish_append_only  # noqa: E402
+
 # =====================
 # Paths
 # =====================
@@ -56,8 +63,9 @@ print(f"Correlation: {corr:.4f}")
 print(f"alpha (GARCH weight): {ALPHA}")
 
 # =====================
-# Save
+# Save (append-only publication)
 # =====================
-df.to_csv(OUT_FILE, index=False)
+# Previously published predictions are immutable; only new dates are appended.
+publish_append_only(df, OUT_FILE, refresh_env="MODEL2_REFRESH_DATES")
 
 print(f"\n✅ Model 2 FINAL volatility saved → {OUT_FILE}")

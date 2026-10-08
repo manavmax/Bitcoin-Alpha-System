@@ -9,6 +9,13 @@ from pathlib import Path
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from src.prediction_store import publish_append_only  # noqa: E402
+
 # ==================== PATHS ====================
 BASE_DIR = Path(__file__).resolve().parents[1]
 
@@ -190,6 +197,14 @@ full_out = full_df.iloc[SEQ_LEN:].copy()
 full_out["cnn_lstm_pred"] = full_preds
 
 RESULTS_OUT.mkdir(exist_ok=True)
-full_out.to_csv(RESULTS_OUT / "model3_cnn_lstm_predictions.csv", index=False)
+# Append-only publication: previously published predictions are immutable.
+# Only new dates are appended; `target_return` (ground truth, unknown on
+# publication day) is backfilled once the next candle closes.
+publish_append_only(
+    full_out,
+    RESULTS_OUT / "model3_cnn_lstm_predictions.csv",
+    backfill_cols=("target_return",),
+    refresh_env="MODEL3_CNN_LSTM_REFRESH_DATES",
+)
 
 print(f"✅ Model 3 CNN-LSTM {'training + ' if RETRAIN else 'inference-only '}full-history predictions completed")

@@ -2,6 +2,13 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from src.prediction_store import publish_append_only  # noqa: E402
+
 # =========================
 # Paths
 # =========================
@@ -137,7 +144,9 @@ df["model7_1_signal"] = df.apply(gate, axis=1)
 # Save
 # =========================
 out = df[["date", "model7_1_signal"]]
-out.to_csv(OUT_FILE, index=False)
+
+# Append-only publication: previously published predictions are immutable.
+publish_append_only(out, OUT_FILE, refresh_env="MODEL7_1_REFRESH_DATES")
 
 print("\n✅ MODEL 7.1 HARD-GATED ENSEMBLE COMPLETE")
 print(f"Saved → {OUT_FILE}")

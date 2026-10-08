@@ -6,6 +6,13 @@ import joblib
 from sklearn.preprocessing import StandardScaler
 from pathlib import Path
 
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from src.prediction_store import publish_append_only  # noqa: E402
+
 # ===============================
 # CONFIG
 # ===============================
@@ -135,9 +142,6 @@ df["macro_final_signal"] = (
     0.4 * df["macro_tree_signal"]
 )
 
-# ===============================
-# SAVE OUTPUT
-# ===============================
 out = df[[
     "date",
     "macro_lstm_signal",
@@ -146,7 +150,18 @@ out = df[[
     "target_return"
 ]]
 
-out.to_csv(OUTPUT_FILE, index=False)
+# ===============================
+# SAVE OUTPUT (append-only publication)
+# ===============================
+# Previously published predictions are immutable; only new dates are appended.
+# `target_return` (ground truth, unknown on publication day) is backfilled
+# once the next candle closes.
+publish_append_only(
+    out,
+    OUTPUT_FILE,
+    backfill_cols=("target_return",),
+    refresh_env="MODEL6_REFRESH_DATES",
+)
 
 print("✅ MODEL 6 ENSEMBLE COMPLETED")
-print(f"Saved → {OUTPUT_FILE}")
+print(f"Published → {OUTPUT_FILE}")

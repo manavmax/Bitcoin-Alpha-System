@@ -3,6 +3,13 @@ import numpy as np
 import joblib
 from pathlib import Path
 
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from src.prediction_store import publish_append_only  # noqa: E402
+
 BASE = Path(__file__).resolve().parents[1]
 
 DATA_MAIN = BASE / "data" / "model8_dataset.csv"
@@ -104,15 +111,21 @@ def main():
     df.loc[mask & (df["direction"] == "SHORT"), "final_signal"] = "SHORT"
 
     # ------------------------------------------------
+    # Include 'tradable' so this output's schema matches the canonical
+    # model8_final_signal.csv published by model8_meta_classifier/src/
+    # model8_final.py (both scripts write the same append-only file;
+    # previously published rows are frozen, first publication wins).
     out = df[
-        ["date", "final_signal", "confidence", "vol_regime", "macro_regime"]
+        ["date", "final_signal", "confidence", "tradable",
+         "vol_regime", "macro_regime"]
     ].copy()
 
     OUT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    out.to_csv(OUT_FILE, index=False)
+    # Append-only publication: previously published predictions are immutable.
+    publish_append_only(out, OUT_FILE, refresh_env="MODEL8_BACKEND_REFRESH_DATES")
 
     print(f"✅ Model 8 inference complete → {OUT_FILE}")
-    print(f"📊 Rows written: {len(out)}")
+    print(f"📊 Rows published: {len(out)}")
 
 
 if __name__ == "__main__":
