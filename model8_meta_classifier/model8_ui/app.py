@@ -102,7 +102,16 @@ confidence_threshold = st.sidebar.slider(
     0.90,
     0.70,
     0.01,
-    help="Trades are only taken when confidence ≥ τ.",
+    help="Trades are only taken when confidence ≥ τ. Recomputed live from "
+    "direction + tradable — lowering τ CAN add trades (old code could not).",
+)
+
+require_tradable = st.sidebar.toggle(
+    "Require tradable regime (8A gate)",
+    value=True,
+    help="ON (default, conservative): effective signal needs tradable==1 AND "
+    "confidence ≥ τ. OFF (exploratory): τ alone decides — shows what 8B wants "
+    "even when 8A says the regime is untradable.",
 )
 
 lookback_days = st.sidebar.select_slider(
@@ -122,7 +131,59 @@ st.sidebar.caption(
 )
 
 # =====================================================
-# HEADER (TOP BAR)
+# EFFECTIVE SIGNAL — recomputed live from raw model outputs
+# (direction + tradable + confidence ≥ τ), NOT from frozen final_signal.
+# This is the fix: lowering τ CAN now add trades.
+# Legacy rows without `direction` fall back to final_signal (never invent).
+# NOTE: computed BEFORE the header so the decision card reflects τ.
+# =====================================================
+def _row_direction(row) -> str:
+    d = str(row.get("direction", "") or "").upper()
+    if d in ("LONG", "SHORT"):
+        return d
+    f = str(row.get("final_signal", "") or "").upper()
+    return f if f in ("LONG", "SHORT") else ""
+
+
+def _row_reason(row, tau: float, need_tradable: bool) -> str:
+    d = _row_direction(row)
+    if not d:
+        return "no directional call"
+    conf = float(row.get("confidence", float("nan")))
+    if not (conf >= tau):
+        return f"confidence {conf:.2f} < τ {tau:.2f}"
+    if need_tradable and int(float(row.get("tradable", 0))) != 1:
+        return "blocked by 8A (tradable=0)"
+    return "active"
+
+
+signal_df = signal_df.copy()
+signal_df["model_direction"] = signal_df.apply(_row_direction, axis=1)
+signal_df["block_reason"] = signal_df.apply(
+    lambda r: _row_reason(r, confidence_threshold, require_tradable), axis=1
+)
+
+
+def _effective(row) -> str:
+    if _row_reason(row, confidence_threshold, require_tradable) == "active":
+        return _row_direction(row)
+    return "NO_TRADE"
+
+
+signal_df["effective_signal"] = signal_df.apply(_effective, axis=1)
+
+if show_all_signals:
+    # Debug view: raw frozen decisions, ignoring τ AND 8A gate.
+    signal_df["effective_signal"] = signal_df["final_signal"].where(
+        signal_df["final_signal"].isin(["LONG", "SHORT"]), "NO_TRADE"
+    )
+
+latest_eff = str(signal_df.iloc[-1]["effective_signal"])
+latest_reason = str(signal_df.iloc[-1]["block_reason"])
+latest_dir = str(signal_df.iloc[-1]["model_direction"])
+
+# =====================================================
+# HEADER (TOP BAR) — shows EFFECTIVE (τ-filtered) decision
 # =====================================================
 top_l, top_r = st.columns([2.0, 1.0])
 with top_l:
@@ -148,12 +209,13 @@ hdr1, hdr2, hdr3, hdr4, hdr5 = st.columns([1.2, 1.0, 1.0, 1.0, 1.2])
 
 # Presentation only: the decision card leads the row, and its direction is
 # encoded on the card edge plus the value colour.
+# Shows the EFFECTIVE (τ-filtered) decision, plus frozen value for audit.
 decision_card_class = "cq-card cq-card--decision"
 decision_value_class = "cq-kpi-value"
-if str(latest["final_signal"]) == "LONG":
+if latest_eff == "LONG":
     decision_card_class = "cq-card cq-card--long"
     decision_value_class = "cq-kpi-value cq-kpi-value--long"
-elif str(latest["final_signal"]) == "SHORT":
+elif latest_eff == "SHORT":
     decision_card_class = "cq-card cq-card--short"
     decision_value_class = "cq-kpi-value cq-kpi-value--short"
 
@@ -161,9 +223,10 @@ with hdr1:
     st.markdown(
         f"""
         <div class="{decision_card_class}">
-          <div class="cq-kpi-title">Model 8 decision</div>
-          <div class="{decision_value_class}">{latest["final_signal"]}</div>
+          <div class="cq-kpi-title">Model 8 decision @ τ={confidence_threshold:.2f}</div>
+          <div class="{decision_value_class}">{latest_eff}</div>
           <div class="cq-kpi-sub">Decision: {decision_date} · Actionable: {actionable_date}</div>
+          <div class="cq-kpi-sub">8B: {latest_dir} · frozen: {latest["final_signal"]} · {latest_reason}</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -202,31 +265,17 @@ with hdr4:
         unsafe_allow_html=True,
     )
 with hdr5:
-    traded = (signal_df["final_signal"].isin(["LONG", "SHORT"]) & (signal_df["confidence"] >= confidence_threshold)).sum()
+    traded = signal_df["effective_signal"].isin(["LONG", "SHORT"]).sum()
     coverage = traded / max(len(signal_df), 1)
     st.markdown(
         f"""
         <div class="cq-card">
-          <div class="cq-kpi-title">Trade coverage (τ-filtered)</div>
+          <div class="cq-kpi-title">Trade coverage (τ={confidence_threshold:.2f})</div>
           <div class="cq-kpi-value">{coverage*100:.1f}%</div>
           <div class="cq-kpi-sub">{int(traded)} trades · sample {len(signal_df)} days</div>
         </div>
         """,
         unsafe_allow_html=True,
-    )
-
-# Effective signal after applying user-selected confidence filter
-signal_df = signal_df.copy()
-signal_df["effective_signal"] = signal_df.apply(
-    lambda row: row["final_signal"]
-    if (row["final_signal"] in ["LONG", "SHORT"]) and (row["confidence"] >= confidence_threshold)
-    else "NO_TRADE",
-    axis=1,
-)
-
-if show_all_signals:
-    signal_df["effective_signal"] = signal_df["final_signal"].where(
-        signal_df["final_signal"].isin(["LONG", "SHORT"]), "NO_TRADE"
     )
 
 # =====================================================

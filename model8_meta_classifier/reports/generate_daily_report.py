@@ -32,15 +32,32 @@ def load_data():
     return df
 
 
-def compute_backtest(df: pd.DataFrame, tau: float = 0.6) -> pd.DataFrame:
+def _row_direction(row) -> str:
+    d = str(row.get("direction", "") or "").upper()
+    if d in ("LONG", "SHORT"):
+        return d
+    f = str(row.get("final_signal", "") or "").upper()
+    return f if f in ("LONG", "SHORT") else ""
+
+
+def compute_backtest(
+    df: pd.DataFrame, tau: float = 0.6, require_tradable: bool = True
+) -> pd.DataFrame:
     df = df.copy()
     df["ret"] = df["close"].pct_change().fillna(0.0)
 
-    df["effective_signal"] = np.where(
-        (df["final_signal"].isin(["LONG", "SHORT"])) & (df["confidence"] >= tau),
-        df["final_signal"],
-        "NO_TRADE",
-    )
+    # Recompute from raw direction (NOT frozen final_signal) so any τ works.
+    def _eff(row):
+        d = _row_direction(row)
+        if not d:
+            return "NO_TRADE"
+        if not (float(row.get("confidence", 0.0)) >= tau):
+            return "NO_TRADE"
+        if require_tradable and int(float(row.get("tradable", 0))) != 1:
+            return "NO_TRADE"
+        return d
+
+    df["effective_signal"] = df.apply(_eff, axis=1)
     df["position"] = 0
     df.loc[df["effective_signal"] == "LONG", "position"] = 1
     df.loc[df["effective_signal"] == "SHORT", "position"] = -1

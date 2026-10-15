@@ -102,7 +102,8 @@ def main():
     df["direction"] = np.where(probs[:, 1] >= 0.5, "LONG", "SHORT")
 
     # ------------------------------------------------
-    # FINAL SIGNAL (NEVER EMPTY)
+    # FINAL SIGNAL (frozen at 0.70 — UI/backend re-apply any τ live
+    # from direction + tradable + confidence; see app.py/effective_signal)
     # ------------------------------------------------
     df["final_signal"] = "NO_TRADE"
     mask = (df["tradable"] == 1) & (df["confidence"] >= 0.70)
@@ -111,14 +112,37 @@ def main():
     df.loc[mask & (df["direction"] == "SHORT"), "final_signal"] = "SHORT"
 
     # ------------------------------------------------
-    # Include 'tradable' so this output's schema matches the canonical
-    # model8_final_signal.csv published by model8_meta_classifier/src/
-    # model8_final.py (both scripts write the same append-only file;
-    # previously published rows are frozen, first publication wins).
-    out = df[
-        ["date", "final_signal", "confidence", "tradable",
-         "vol_regime", "macro_regime"]
-    ].copy()
+    # Include 'tradable' + 'direction' so this output's schema matches the
+    # canonical model8_final_signal.csv published by
+    # model8_meta_classifier/src/model8_final.py (both scripts write the
+    # same append-only file; previously published predictions are frozen,
+    # first publication wins — except `direction`, backfilled for display).
+    # `direction` is the raw 8B call and lets the UI recompute
+    # effective_signal at any user-chosen τ.
+    OUT_COLUMNS = ["date", "final_signal", "confidence", "direction",
+                   "tradable", "vol_regime", "macro_regime"]
+    # Backfill direction for legacy rows (display only — frozen
+    # final_signal/confidence/tradable are never touched).
+    try:
+        _pub = pd.read_csv(OUT_FILE)
+        if "direction" not in _pub.columns and len(_pub):
+            _map = df.copy()
+            _map["date"] = pd.to_datetime(_map["date"], utc=True)
+            _map = _map.drop_duplicates(subset=["date"], keep="last") \
+                .set_index("date")["direction"]
+            _pub["date"] = pd.to_datetime(_pub["date"], utc=True)
+            _pub["direction"] = _pub["date"].map(_map)
+            _need = _pub["direction"].isna()
+            _pub.loc[_need, "direction"] = _pub.loc[_need, "final_signal"] \
+                .where(_pub.loc[_need, "final_signal"].isin(["LONG", "SHORT"]),
+                       "UNKNOWN")
+            _pub["date"] = _pub["date"].dt.strftime("%Y-%m-%d")
+            _pub.to_csv(OUT_FILE, index=False)
+            print(f"🔄 Migrated legacy CSV: backfilled direction for "
+                  f"{int((~_need).sum())}/{len(_pub)} row(s)")
+    except FileNotFoundError:
+        pass
+    out = df[OUT_COLUMNS].copy()
 
     OUT_FILE.parent.mkdir(parents=True, exist_ok=True)
     # Append-only publication: previously published predictions are immutable.

@@ -5,13 +5,18 @@ import pandas as pd
 import joblib
 import numpy as np
 
-TAU = 0.60  # confidence threshold
+TAU = 0.60  # default display threshold (UI slider may override at view time)
 
 # Append-only publication target. Rows already written here are immutable:
 # reruns never recompute or rewrite previously published predictions - each
 # run only appends dates that have newly closed.
 OUT_CSV = "model8_meta_classifier/results/model8_final_signal.csv"
-OUT_COLUMNS = ["date", "final_signal", "confidence",
+# NOTE: `direction` (raw 8B LONG/SHORT call) is stored alongside the frozen
+# `final_signal` so the UI can re-apply a user-chosen τ without rewriting
+# history. `final_signal` remains the frozen published decision at TAU;
+# `effective_signal` is computed live in the UI/backend from
+# direction + tradable + confidence >= τ.
+OUT_COLUMNS = ["date", "final_signal", "confidence", "direction",
                "tradable", "vol_regime", "macro_regime"]
 
 # --------------------------------------------------
@@ -118,18 +123,21 @@ def main():
     X_8B = df[FEATURES_8B]
 
     probs = model8B.predict_proba(X_8B)
-    df["direction"] = model8B.predict(X_8B)
+    df["direction_num"] = model8B.predict(X_8B)
     df["confidence"] = probs.max(axis=1)
+    # Store raw 8B call as LONG/SHORT so the UI/backend can re-apply any τ
+    # without rewriting the frozen final_signal.
+    df["direction"] = np.where(df["direction_num"] == 1, "LONG", "SHORT")
 
     # --------------------------------------------------
-    # Final Signal Logic
+    # Final Signal Logic (frozen at TAU — display may use any τ)
     # --------------------------------------------------
     df["final_signal"] = "NO_TRADE"
 
     active = (df["tradable"] == 1) & (df["confidence"] >= TAU)
 
-    df.loc[active & (df["direction"] == 1), "final_signal"] = "LONG"
-    df.loc[active & (df["direction"] == 0), "final_signal"] = "SHORT"
+    df.loc[active & (df["direction_num"] == 1), "final_signal"] = "LONG"
+    df.loc[active & (df["direction_num"] == 0), "final_signal"] = "SHORT"
 
     # --------------------------------------------------
     # Save output — APPEND-ONLY publication
@@ -156,10 +164,34 @@ def main():
         return
 
     published = pd.read_csv(OUT_CSV)
+    # Schema migration: legacy 6-col file (no `direction`) is accepted.
+    # `direction` is backfilled from the fresh frame for display only —
+    # final_signal / confidence / tradable stay frozen.
+    LEGACY_COLUMNS = ["date", "final_signal", "confidence",
+                      "tradable", "vol_regime", "macro_regime"]
+    if "direction" not in published.columns:
+        if not set(LEGACY_COLUMNS).issubset(published.columns):
+            raise RuntimeError(
+                f"❌ {OUT_CSV} has an unexpected schema {list(published.columns)}; "
+                "refusing to touch published predictions."
+            )
+        _dir_map = fresh.copy()
+        _dir_map["date"] = pd.to_datetime(_dir_map["date"], utc=True)
+        _dir_map = _dir_map.drop_duplicates(subset=["date"], keep="last") \
+            .set_index("date")["direction"]
+        published["date"] = pd.to_datetime(published["date"], utc=True)
+        published["direction"] = published["date"].map(_dir_map)
+        # Rows whose direction cannot be recomputed (e.g. dataset pruned)
+        # fall back to the frozen final_signal so UI never invents a call.
+        _need = published["direction"].isna()
+        published.loc[_need, "direction"] = published.loc[_need, "final_signal"] \
+            .where(published.loc[_need, "final_signal"].isin(["LONG", "SHORT"]), "UNKNOWN")
+        print(f"🔄 Migrated legacy CSV: backfilled direction for "
+              f"{int((~_need).sum())}/{len(published)} row(s)")
     if not set(OUT_COLUMNS).issubset(published.columns):
         raise RuntimeError(
             f"❌ {OUT_CSV} has an unexpected schema {list(published.columns)}; "
-            "refusing to touch published predictions. Restore the 6-column "
+            "refusing to touch published predictions. Restore the 7-column "
             "file before re-running."
         )
     published = published[OUT_COLUMNS]
@@ -203,6 +235,7 @@ def main():
     combined["macro_regime"] = combined["macro_regime"].astype("int64")
     combined["vol_regime"] = combined["vol_regime"].astype("float64")
     combined["confidence"] = combined["confidence"].astype("float64")
+    combined["direction"] = combined["direction"].astype(str)
     combined = combined[OUT_COLUMNS]
 
     combined.to_csv(OUT_CSV, index=False)
