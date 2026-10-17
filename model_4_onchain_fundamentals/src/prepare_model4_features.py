@@ -50,7 +50,11 @@ if RAW_CM.exists():
     cm = pd.read_csv(RAW_CM, parse_dates=["date"])
     cm["date"] = pd.to_datetime(cm["date"])
     cm = cm.sort_values("date")
-    df = df.merge(cm, on="date", how="left", suffixes=("", "_cm"))
+    # OUTER merge (critical): CoinMetrics often has newer dates than
+    # Blockchain.com (which lags ~1-2 days on difficulty/miner_revenue).
+    # A left merge would silently drop those latest dates, leaving
+    # signal_4 one day stale vs the master timeline (signal_4_missing=1).
+    df = df.merge(cm, on="date", how="outer", suffixes=("", "_cm"))
 
     for col in ["hash_rate", "difficulty", "tx_count", "tx_volume_usd", "miner_revenue"]:
         cm_col = f"{col}_cm"
